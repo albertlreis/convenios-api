@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -11,20 +12,23 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('municipio_demografia', function (Blueprint $table) {
+        Schema::create('demografia_municipio', function (Blueprint $table) {
+            $table->charset = 'utf8mb4';
+            $table->collation = 'utf8mb4_unicode_ci';
             $table->id();
-            $table->foreignId('municipio_id')->constrained('municipio');
+            $table->unsignedBigInteger('municipio_id');
             $table->unsignedSmallInteger('ano_ref');
-            $table->unsignedBigInteger('populacao')->default(0);
-            $table->unsignedBigInteger('eleitores')->default(0);
-            $table->timestamps();
-            $table->softDeletes();
-            $table->boolean('is_active')->virtualAs('IF(deleted_at IS NULL, 1, NULL)');
+            $table->integer('populacao');
+            $table->integer('eleitores')->nullable();
+            $table->dateTime('created_at')->useCurrent();
+            $table->dateTime('updated_at')->nullable();
 
-            $table->unique(['municipio_id', 'ano_ref', 'is_active'], 'municipio_demografia_unique_active');
-            $table->index('ano_ref');
-            $table->index('municipio_id');
+            $table->unique(['municipio_id', 'ano_ref'], 'uq_demografia_municipio_ano');
+            $table->index('ano_ref', 'idx_demografia_ano');
+            $table->foreign('municipio_id', 'fk_demografia_municipio')->references('id')->on('municipio')->restrictOnUpdate()->restrictOnDelete();
         });
+
+        DB::statement('ALTER TABLE `demografia_municipio` MODIFY `updated_at` DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP');
     }
 
     /**
@@ -32,6 +36,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('municipio_demografia');
+        Schema::dropIfExists('demografia_municipio');
     }
 };

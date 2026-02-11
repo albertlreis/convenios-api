@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -12,20 +13,21 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('prefeito', function (Blueprint $table) {
+            $table->charset = 'utf8mb4';
+            $table->collation = 'utf8mb4_unicode_ci';
             $table->id();
-            $table->string('nome_completo');
-            $table->string('nome_urna')->nullable();
-            $table->date('data_nascimento')->nullable();
-            $table->string('cpf_hash')->nullable();
-            $table->string('chave');
-            $table->timestamps();
-            $table->softDeletes();
-            $table->boolean('is_active')->virtualAs('IF(deleted_at IS NULL, 1, NULL)');
+            $table->unsignedBigInteger('legacy_id')->nullable();
+            $table->string('nome_completo', 200);
+            $table->string('nome_urna', 200)->nullable();
+            $table->date('dt_nascimento')->nullable();
+            $table->dateTime('created_at')->useCurrent();
+            $table->dateTime('updated_at')->nullable();
 
-            $table->unique(['chave', 'is_active'], 'prefeito_chave_unique_active');
-            $table->index('nome_completo');
-            $table->index('nome_urna');
+            $table->index('nome_completo', 'idx_prefeito_nome');
+            $table->index('nome_urna', 'idx_prefeito_urna');
         });
+
+        DB::statement('ALTER TABLE `prefeito` MODIFY `updated_at` DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP');
     }
 
     /**
