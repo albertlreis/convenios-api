@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Convenio;
+use App\Models\ConvenioPlanoInterno;
 use App\Models\Municipio;
 use App\Models\MunicipioDemografia;
 use App\Models\Orgao;
@@ -96,7 +97,12 @@ class ApiSmokeTest extends TestCase
             'orgao_id' => $orgao->id,
             'municipio_beneficiario_id' => $municipio->id,
             'codigo' => 'SM:001/2026',
+        ]);
+
+        ConvenioPlanoInterno::query()->create([
+            'convenio_id' => $convenio->id,
             'plano_interno' => 'AB12CD34EF5',
+            'origem' => 'test',
         ]);
 
         Parcela::factory()->create([

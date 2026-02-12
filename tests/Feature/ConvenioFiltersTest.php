@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Convenio;
+use App\Models\ConvenioPlanoInterno;
 use App\Models\Municipio;
 use App\Models\MunicipioDemografia;
 use App\Models\Orgao;
@@ -38,14 +39,23 @@ class ConvenioFiltersTest extends TestCase
             'orgao_id' => $orgao->id,
             'codigo' => 'AA:111/2026',
             'municipio_beneficiario_id' => $municipioA->id,
-            'plano_interno' => 'AA11BB22CC3',
         ]);
 
         $convenioFechado = Convenio::factory()->create([
             'orgao_id' => $orgao->id,
             'codigo' => 'BB:222/2026',
             'municipio_beneficiario_id' => $municipioB->id,
+        ]);
+
+        ConvenioPlanoInterno::query()->create([
+            'convenio_id' => $convenioAberto->id,
+            'plano_interno' => 'AA11BB22CC3',
+            'origem' => 'test',
+        ]);
+        ConvenioPlanoInterno::query()->create([
+            'convenio_id' => $convenioFechado->id,
             'plano_interno' => 'DD44EE55FF6',
+            'origem' => 'test',
         ]);
 
         Parcela::factory()->create([

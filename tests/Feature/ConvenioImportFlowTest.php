@@ -1,0 +1,216 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Municipio;
+use App\Models\Orgao;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Tests\TestCase;
+
+class ConvenioImportFlowTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_upload_salva_staging_mesmo_com_dados_ruins(): void
+    {
+        $file = $this->buildImportFile(
+            listaRows: [
+                [
+                    'orgao' => 'SETESTE',
+                    'municipio' => 'Municipio Bom',
+                    'convenente' => 'Prefeitura',
+                    'numero_convenio' => 'CV-001/2026',
+                    'ano' => '2026',
+                ],
+                [
+                    'orgao' => 'SETESTE',
+                    'municipio' => 'Municipio Ruim',
+                    'convenente' => 'Prefeitura',
+                    'numero_convenio' => '',
+                    'ano' => '2026',
+                ],
+            ],
+            parcelasRows: [],
+            piRows: []
+        );
+
+        $response = $this->postJson('/api/v1/imports/convenios/upload', [
+            'arquivo' => $file,
+        ])->assertCreated();
+
+        $importId = $response->json('data.id');
+        $this->assertNotNull($importId);
+
+        $this->assertDatabaseHas('convenio_imports', [
+            'id' => $importId,
+            'total_lista_rows' => 2,
+            'status' => 'parsed',
+        ]);
+        $this->assertDatabaseHas('convenio_import_lista_rows', [
+            'import_id' => $importId,
+            'row_number' => 3,
+            'status' => 'parsed_with_issues',
+        ]);
+    }
+
+    public function test_confirm_nao_bloqueia_e_cria_pendencias(): void
+    {
+        Orgao::query()->create([
+            'sigla' => 'SETESTE',
+            'nome' => 'Secretaria de Teste',
+        ]);
+
+        Municipio::query()->create([
+            'regiao_id' => null,
+            'nome' => 'Municipio Bom',
+            'uf' => 'PA',
+            'codigo_ibge' => '1500001',
+            'codigo_tse' => 1001,
+        ]);
+
+        $file = $this->buildImportFile(
+            listaRows: [
+                [
+                    'orgao' => 'SETESTE',
+                    'municipio' => 'Municipio Bom',
+                    'convenente' => 'Municipio Bom',
+                    'numero_convenio' => 'CV-100/2026',
+                    'ano' => '2026',
+                    'plano_interno' => 'PI000000001',
+                    'objeto' => 'Teste',
+                    'grupo_despesa' => 'CUSTEIO',
+                    'data_inicio' => '2026-01-01',
+                    'data_fim' => '2026-12-31',
+                    'valor_total' => '1000,00',
+                    'valor_orgao' => '800,00',
+                    'valor_contrapartida' => '200,00',
+                    'quantidade_parcelas' => '2',
+                ],
+                [
+                    'orgao' => 'SETESTE',
+                    'municipio' => 'Municipio Fantasma',
+                    'convenente' => 'Municipio Fantasma',
+                    'numero_convenio' => 'CV-200/2026',
+                    'ano' => '2026',
+                    'plano_interno' => 'PI000000002',
+                ],
+            ],
+            parcelasRows: [
+                [
+                    'numero_convenio' => 'CV-100/2026',
+                    'numero_parcela' => '1',
+                    'valor_previsto' => '500,00',
+                    'situacao' => 'PREVISTA',
+                    'data_pagamento' => '',
+                    'valor_pago' => '',
+                    'observacoes' => '',
+                ],
+                [
+                    'numero_convenio' => 'CV-INEXISTENTE',
+                    'numero_parcela' => '1',
+                    'valor_previsto' => '300,00',
+                    'situacao' => 'PREVISTA',
+                    'data_pagamento' => '',
+                    'valor_pago' => '',
+                    'observacoes' => '',
+                ],
+            ],
+            piRows: [
+                [
+                    'numero_convenio' => 'CV-100/2026',
+                    'plano_interno' => 'PI000000003',
+                ],
+            ]
+        );
+
+        $upload = $this->postJson('/api/v1/imports/convenios/upload', ['arquivo' => $file])->assertCreated();
+        $importId = $upload->json('data.id');
+
+        $this->postJson('/api/v1/imports/convenios/confirm', ['import_id' => $importId])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'confirmed');
+
+        $this->assertDatabaseHas('convenio', ['numero_convenio' => 'CV-100/2026']);
+        $this->assertDatabaseHas('convenio', [
+            'numero_convenio' => 'CV-200/2026',
+            'municipio_beneficiario_id' => null,
+            'municipio_beneficiario_nome_informado' => 'Municipio Fantasma',
+        ]);
+        $this->assertDatabaseHas('convenio_import_pending_items', [
+            'import_id' => $importId,
+            'reason' => 'municipio_beneficiario_nao_encontrado',
+            'reference_key' => 'CV-200/2026',
+        ]);
+        $this->assertDatabaseHas('convenio_import_pending_items', [
+            'import_id' => $importId,
+            'reason' => 'convenio_nao_encontrado',
+            'reference_key' => 'CV-INEXISTENTE',
+        ]);
+        $this->assertDatabaseHas('convenio_plano_interno', [
+            'plano_interno' => 'PI000000003',
+        ]);
+        $this->assertDatabaseHas('parcela', [
+            'numero' => 1,
+            'convenio_numero_informado' => 'CV-100/2026',
+        ]);
+    }
+
+    private function buildImportFile(array $listaRows, array $parcelasRows, array $piRows): UploadedFile
+    {
+        $spreadsheet = new Spreadsheet;
+        $spreadsheet->getActiveSheet()->setTitle('lista');
+        $spreadsheet->createSheet()->setTitle('parcelas');
+        $spreadsheet->createSheet()->setTitle('plano_interno');
+
+        $this->writeSheet(
+            $spreadsheet->getSheetByName('lista'),
+            ['orgao', 'municipio', 'convenente', 'numero_convenio', 'ano', 'plano_interno', 'objeto', 'grupo_despesa', 'data_inicio', 'data_fim', 'valor_total', 'valor_orgao', 'valor_contrapartida', 'quantidade_parcelas'],
+            $listaRows
+        );
+        $this->writeSheet(
+            $spreadsheet->getSheetByName('parcelas'),
+            ['numero_convenio', 'numero_parcela', 'valor_previsto', 'situacao', 'data_pagamento', 'valor_pago', 'observacoes'],
+            $parcelasRows
+        );
+        $this->writeSheet(
+            $spreadsheet->getSheetByName('plano_interno'),
+            ['numero_convenio', 'plano_interno'],
+            $piRows
+        );
+
+        $path = storage_path('app/private/testing/convenio-import-'.uniqid('', true).'.xlsx');
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($path);
+
+        return new UploadedFile(
+            $path,
+            basename($path),
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true
+        );
+    }
+
+    private function writeSheet(mixed $sheet, array $headers, array $rows): void
+    {
+        foreach ($headers as $index => $header) {
+            $sheet->setCellValueByColumnAndRow($index + 1, 1, $header);
+        }
+
+        $line = 2;
+        foreach ($rows as $row) {
+            foreach ($headers as $index => $header) {
+                $sheet->setCellValueByColumnAndRow($index + 1, $line, (string) ($row[$header] ?? ''));
+            }
+            $line++;
+        }
+    }
+}
+
