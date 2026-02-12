@@ -7,7 +7,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $statements = $this->parseInsertStatements(database_path('seeders/data/02_seeds_politico.sql'));
+        $statements = $this->loadStatements();
 
         $uniqueBy = [
             'regiao_integracao' => ['id'],
@@ -32,7 +32,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        $statements = $this->parseInsertStatements(database_path('seeders/data/02_seeds_politico.sql'));
+        $statements = $this->loadStatements();
 
         $idsByTable = [];
         foreach ($statements as $statement) {
@@ -92,6 +92,21 @@ return new class extends Migration
         }
 
         return $statements;
+    }
+
+    private function loadStatements(): array
+    {
+        $files = [
+            database_path('seeders/data/01_municipios.sql'),
+            database_path('seeders/data/02_politico.sql'),
+        ];
+
+        $allStatements = [];
+        foreach ($files as $file) {
+            $allStatements = array_merge($allStatements, $this->parseInsertStatements($file));
+        }
+
+        return $allStatements;
     }
 
     private function extractTuples(string $valuesBlock): array

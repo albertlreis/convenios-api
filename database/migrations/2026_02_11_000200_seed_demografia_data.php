@@ -7,7 +7,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $statement = $this->parseFirstInsertStatement(database_path('seeders/data/03_seed_demografia_pa_2026.sql'));
+        $statement = $this->parseFirstInsertStatement(database_path('seeders/data/03_demografia_pa_2026.sql'));
 
         foreach (array_chunk($statement['rows'], 500) as $chunk) {
             DB::table($statement['table'])->upsert($chunk, ['municipio_id', 'ano_ref'], ['populacao', 'eleitores']);
@@ -16,7 +16,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        $statement = $this->parseFirstInsertStatement(database_path('seeders/data/03_seed_demografia_pa_2026.sql'));
+        $statement = $this->parseFirstInsertStatement(database_path('seeders/data/03_demografia_pa_2026.sql'));
 
         $pairs = [];
         foreach ($statement['rows'] as $row) {
