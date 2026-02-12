@@ -155,3 +155,31 @@ curl "http://localhost:8080/api/convenios/1/financeiro"
 - `codigo` segue regex `^[A-Z0-9]{2,20}:\d{3}\/\d{4}$` e permite reuso após soft delete.
 - PI (`plano_interno`) é tratado como string alfanumérica de 11 caracteres.
 - Soft delete aplicado nas entidades solicitadas.
+
+## Troubleshooting (Storage em Docker)
+
+Se ocorrer erro ao subir importações, por exemplo:
+
+`Unable to create a directory at /var/www/html/storage/app/private/imports/convenios`
+
+verifique:
+
+1. O disk `private` em `config/filesystems.php`.
+2. Permissões em `storage` e `bootstrap/cache`.
+3. Se o container foi recriado após mudanças de Dockerfile/entrypoint.
+
+Este projeto já inclui um entrypoint (`docker/8.4/entrypoint.sh`) que, a cada start:
+
+- garante diretórios `storage/app/private/imports/convenios`;
+- garante `storage/framework/{cache,sessions,views}` e `bootstrap/cache`;
+- ajusta owner para `WWWUSER:WWWGROUP`;
+- aplica `chmod -R ug+rwX` em `storage` e `bootstrap/cache`.
+
+Comandos úteis:
+
+```bash
+docker compose up -d --build --force-recreate convenios-api
+docker exec convenios-api php artisan config:clear
+docker exec convenios-api php artisan cache:clear
+docker exec convenios-api php -r 'require "vendor/autoload.php"; $app=require "bootstrap/app.php"; $kernel=$app->make(Illuminate\Contracts\Console\Kernel::class); $kernel->bootstrap(); Illuminate\Support\Facades\Storage::disk("private")->makeDirectory("imports/convenios"); echo "ok\n";'
+```
