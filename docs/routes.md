@@ -1,0 +1,56 @@
+# Routes
+
+| Method | URI | Name | Action | Middleware |
+| --- | --- | --- | --- | --- |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/convenios; name=convenios.index; action=App\Http\Controllers\Api\ConvenioController@index; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=POST; uri=api/v1/convenios; name=convenios.store; action=App\Http\Controllers\Api\ConvenioController@store; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=DELETE; uri=api/v1/convenios/{convenio}; name=convenios.destroy; action=App\Http\Controllers\Api\ConvenioController@destroy; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/convenios/{convenio}; name=convenios.show; action=App\Http\Controllers\Api\ConvenioController@show; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=PUT|PATCH; uri=api/v1/convenios/{convenio}; name=convenios.update; action=App\Http\Controllers\Api\ConvenioController@update; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/convenios/{convenio}/financeiro; name=; action=App\Http\Controllers\Api\FinanceiroController@showByConvenio; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/convenios/{convenio}/parcelas; name=; action=App\Http\Controllers\Api\ConvenioController@parcelas; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/convenios/{convenio}/parcelas-em-aberto; name=; action=App\Http\Controllers\Api\ConvenioController@parcelasEmAberto; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/convenios/indicadores/eleitores-atendidos; name=; action=App\Http\Controllers\Api\ConvenioIndicadoresController@eleitoresAtendidos; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/convenios/indicadores/populacao-atendida; name=; action=App\Http\Controllers\Api\ConvenioIndicadoresController@populacaoAtendida; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/convenios/indicadores/quantidade-com-parcelas-em-aberto; name=; action=App\Http\Controllers\Api\ConvenioIndicadoresController@quantidadeComParcelasEmAberto; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/convenios/indicadores/valores-em-aberto; name=; action=App\Http\Controllers\Api\ConvenioIndicadoresController@valoresEmAberto; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/financeiro/pi/{pi}; name=; action=App\Http\Controllers\Api\FinanceiroController@showByPi; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/health; name=; action=Closure; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/mandatos; name=mandatos.index; action=App\Http\Controllers\Api\MandatoController@index; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=POST; uri=api/v1/mandatos; name=mandatos.store; action=App\Http\Controllers\Api\MandatoController@store; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=DELETE; uri=api/v1/mandatos/{mandato}; name=mandatos.destroy; action=App\Http\Controllers\Api\MandatoController@destroy; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/mandatos/{mandato}; name=mandatos.show; action=App\Http\Controllers\Api\MandatoController@show; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=PUT|PATCH; uri=api/v1/mandatos/{mandato}; name=mandatos.update; action=App\Http\Controllers\Api\MandatoController@update; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/municipio-demografias; name=municipio-demografias.index; action=App\Http\Controllers\Api\MunicipioDemografiaController@index; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=POST; uri=api/v1/municipio-demografias; name=municipio-demografias.store; action=App\Http\Controllers\Api\MunicipioDemografiaController@store; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=DELETE; uri=api/v1/municipio-demografias/{municipioDemografia}; name=municipio-demografias.destroy; action=App\Http\Controllers\Api\MunicipioDemografiaController@destroy; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/municipio-demografias/{municipioDemografia}; name=municipio-demografias.show; action=App\Http\Controllers\Api\MunicipioDemografiaController@show; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=PUT|PATCH; uri=api/v1/municipio-demografias/{municipioDemografia}; name=municipio-demografias.update; action=App\Http\Controllers\Api\MunicipioDemografiaController@update; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/municipios; name=municipios.index; action=App\Http\Controllers\Api\MunicipioController@index; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=POST; uri=api/v1/municipios; name=municipios.store; action=App\Http\Controllers\Api\MunicipioController@store; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=DELETE; uri=api/v1/municipios/{municipio}; name=municipios.destroy; action=App\Http\Controllers\Api\MunicipioController@destroy; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/municipios/{municipio}; name=municipios.show; action=App\Http\Controllers\Api\MunicipioController@show; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=PUT|PATCH; uri=api/v1/municipios/{municipio}; name=municipios.update; action=App\Http\Controllers\Api\MunicipioController@update; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/municipios/indicadores/eleitores-por-regiao; name=; action=App\Http\Controllers\Api\MunicipioIndicadoresController@eleitoresPorRegiao; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/municipios/indicadores/populacao-por-regiao; name=; action=App\Http\Controllers\Api\MunicipioIndicadoresController@populacaoPorRegiao; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/orgaos; name=orgaos.index; action=App\Http\Controllers\Api\OrgaoController@index; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=POST; uri=api/v1/orgaos; name=orgaos.store; action=App\Http\Controllers\Api\OrgaoController@store; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=DELETE; uri=api/v1/orgaos/{orgao}; name=orgaos.destroy; action=App\Http\Controllers\Api\OrgaoController@destroy; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/orgaos/{orgao}; name=orgaos.show; action=App\Http\Controllers\Api\OrgaoController@show; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=PUT|PATCH; uri=api/v1/orgaos/{orgao}; name=orgaos.update; action=App\Http\Controllers\Api\OrgaoController@update; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/parcelas; name=parcelas.index; action=App\Http\Controllers\Api\ParcelaController@index; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=POST; uri=api/v1/parcelas; name=parcelas.store; action=App\Http\Controllers\Api\ParcelaController@store; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=DELETE; uri=api/v1/parcelas/{parcela}; name=parcelas.destroy; action=App\Http\Controllers\Api\ParcelaController@destroy; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/parcelas/{parcela}; name=parcelas.show; action=App\Http\Controllers\Api\ParcelaController@show; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=PUT|PATCH; uri=api/v1/parcelas/{parcela}; name=parcelas.update; action=App\Http\Controllers\Api\ParcelaController@update; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=PATCH; uri=api/v1/parcelas/{parcela}/pagamento; name=; action=App\Http\Controllers\Api\ParcelaController@patchPagamento; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/partidos; name=partidos.index; action=App\Http\Controllers\Api\PartidoController@index; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=POST; uri=api/v1/partidos; name=partidos.store; action=App\Http\Controllers\Api\PartidoController@store; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=DELETE; uri=api/v1/partidos/{partido}; name=partidos.destroy; action=App\Http\Controllers\Api\PartidoController@destroy; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/partidos/{partido}; name=partidos.show; action=App\Http\Controllers\Api\PartidoController@show; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=PUT|PATCH; uri=api/v1/partidos/{partido}; name=partidos.update; action=App\Http\Controllers\Api\PartidoController@update; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/prefeitos; name=prefeitos.index; action=App\Http\Controllers\Api\PrefeitoController@index; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=POST; uri=api/v1/prefeitos; name=prefeitos.store; action=App\Http\Controllers\Api\PrefeitoController@store; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=DELETE; uri=api/v1/prefeitos/{prefeito}; name=prefeitos.destroy; action=App\Http\Controllers\Api\PrefeitoController@destroy; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=GET|HEAD; uri=api/v1/prefeitos/{prefeito}; name=prefeitos.show; action=App\Http\Controllers\Api\PrefeitoController@show; middleware=System.Object[]}.uri) | $name | $action | $mw |
+| $method | $(@{domain=; method=PUT|PATCH; uri=api/v1/prefeitos/{prefeito}; name=prefeitos.update; action=App\Http\Controllers\Api\PrefeitoController@update; middleware=System.Object[]}.uri) | $name | $action | $mw |

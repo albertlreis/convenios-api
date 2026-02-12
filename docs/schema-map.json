@@ -1,0 +1,1896 @@
+{
+    "connection": "mysql",
+    "database": "convenios",
+    "generated_at": "2026-02-12T16:45:10+00:00",
+    "tables": {
+        "cache": {
+            "columns": [
+                {
+                    "name": "key",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "value",
+                    "column_type": "mediumtext",
+                    "data_type": "mediumtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "expiration",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "cache_expiration_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "expiration"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "key"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "cache_locks": {
+            "columns": [
+                {
+                    "name": "key",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "owner",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "expiration",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "cache_locks_expiration_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "expiration"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "key"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "convenio": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "orgao_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "numero_convenio",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "codigo",
+                    "column_type": "varchar(32)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "municipio_beneficiario_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "convenente_nome",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "convenente_municipio_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "plano_interno",
+                    "column_type": "varchar(11)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "objeto",
+                    "column_type": "text",
+                    "data_type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "grupo_despesa",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "data_inicio",
+                    "column_type": "date",
+                    "data_type": "date",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "data_fim",
+                    "column_type": "date",
+                    "data_type": "date",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "valor_orgao",
+                    "column_type": "decimal(15,2)",
+                    "data_type": "decimal",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "valor_contrapartida",
+                    "column_type": "decimal(15,2)",
+                    "data_type": "decimal",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "valor_aditivo",
+                    "column_type": "decimal(15,2)",
+                    "data_type": "decimal",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "valor_total_informado",
+                    "column_type": "decimal(15,2)",
+                    "data_type": "decimal",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "valor_total_calculado",
+                    "column_type": "decimal(15,2)",
+                    "data_type": "decimal",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "metadata",
+                    "column_type": "json",
+                    "data_type": "json",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                },
+                {
+                    "name": "deleted_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "is_active",
+                    "column_type": "tinyint(1)",
+                    "data_type": "tinyint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "VIRTUAL GENERATED"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "convenio_codigo_unique_active",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "codigo",
+                        "is_active"
+                    ]
+                },
+                {
+                    "name": "convenio_convenente_municipio_id_foreign",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "convenente_municipio_id"
+                    ]
+                },
+                {
+                    "name": "convenio_data_fim_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "data_fim"
+                    ]
+                },
+                {
+                    "name": "convenio_data_inicio_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "data_inicio"
+                    ]
+                },
+                {
+                    "name": "convenio_municipio_beneficiario_id_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "municipio_beneficiario_id"
+                    ]
+                },
+                {
+                    "name": "convenio_orgao_id_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "orgao_id"
+                    ]
+                },
+                {
+                    "name": "convenio_orgao_municipio_pi_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "orgao_id",
+                        "municipio_beneficiario_id",
+                        "plano_interno"
+                    ]
+                },
+                {
+                    "name": "convenio_plano_interno_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "plano_interno"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                }
+            ],
+            "foreign_keys": [
+                {
+                    "name": "convenio_convenente_municipio_id_foreign",
+                    "columns": [
+                        "convenente_municipio_id"
+                    ],
+                    "referenced_table": "municipio",
+                    "referenced_columns": [
+                        "id"
+                    ],
+                    "on_update": "NO ACTION",
+                    "on_delete": "NO ACTION"
+                },
+                {
+                    "name": "convenio_municipio_beneficiario_id_foreign",
+                    "columns": [
+                        "municipio_beneficiario_id"
+                    ],
+                    "referenced_table": "municipio",
+                    "referenced_columns": [
+                        "id"
+                    ],
+                    "on_update": "NO ACTION",
+                    "on_delete": "NO ACTION"
+                },
+                {
+                    "name": "convenio_orgao_id_foreign",
+                    "columns": [
+                        "orgao_id"
+                    ],
+                    "referenced_table": "orgao",
+                    "referenced_columns": [
+                        "id"
+                    ],
+                    "on_update": "NO ACTION",
+                    "on_delete": "NO ACTION"
+                }
+            ]
+        },
+        "demografia_municipio": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "municipio_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "ano_ref",
+                    "column_type": "smallint",
+                    "data_type": "smallint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "populacao",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "eleitores",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "idx_demografia_ano",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "ano_ref"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                },
+                {
+                    "name": "uq_demografia_municipio_ano",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "municipio_id",
+                        "ano_ref"
+                    ]
+                }
+            ],
+            "foreign_keys": [
+                {
+                    "name": "fk_demografia_municipio",
+                    "columns": [
+                        "municipio_id"
+                    ],
+                    "referenced_table": "municipio",
+                    "referenced_columns": [
+                        "id"
+                    ],
+                    "on_update": "RESTRICT",
+                    "on_delete": "RESTRICT"
+                }
+            ]
+        },
+        "failed_jobs": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "uuid",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "connection",
+                    "column_type": "text",
+                    "data_type": "text",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "queue",
+                    "column_type": "text",
+                    "data_type": "text",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "payload",
+                    "column_type": "longtext",
+                    "data_type": "longtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "exception",
+                    "column_type": "longtext",
+                    "data_type": "longtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "failed_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "failed_jobs_uuid_unique",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "uuid"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "job_batches": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "name",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "total_jobs",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "pending_jobs",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "failed_jobs",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "failed_job_ids",
+                    "column_type": "longtext",
+                    "data_type": "longtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "options",
+                    "column_type": "mediumtext",
+                    "data_type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "cancelled_at",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "finished_at",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "jobs": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "queue",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "payload",
+                    "column_type": "longtext",
+                    "data_type": "longtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "attempts",
+                    "column_type": "tinyint unsigned",
+                    "data_type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "reserved_at",
+                    "column_type": "int unsigned",
+                    "data_type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "available_at",
+                    "column_type": "int unsigned",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "int unsigned",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "jobs_queue_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "queue"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "mandato_prefeito": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "legacy_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "municipio_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "prefeito_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "partido_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "ano_eleicao",
+                    "column_type": "smallint",
+                    "data_type": "smallint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "cd_eleicao",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "dt_eleicao",
+                    "column_type": "date",
+                    "data_type": "date",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "nr_turno",
+                    "column_type": "tinyint",
+                    "data_type": "tinyint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "nr_candidato",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "mandato_inicio",
+                    "column_type": "date",
+                    "data_type": "date",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "mandato_fim",
+                    "column_type": "date",
+                    "data_type": "date",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "mandato_consecutivo",
+                    "column_type": "tinyint",
+                    "data_type": "tinyint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "reeleito",
+                    "column_type": "tinyint(1)",
+                    "data_type": "tinyint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "fk_mandato_partido",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "partido_id"
+                    ]
+                },
+                {
+                    "name": "idx_mandato_municipio",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "municipio_id",
+                        "mandato_inicio",
+                        "mandato_fim"
+                    ]
+                },
+                {
+                    "name": "idx_mandato_prefeito",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "prefeito_id",
+                        "mandato_inicio"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                },
+                {
+                    "name": "uq_mandato_eleicao",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "municipio_id",
+                        "ano_eleicao",
+                        "dt_eleicao",
+                        "nr_turno"
+                    ]
+                }
+            ],
+            "foreign_keys": [
+                {
+                    "name": "fk_mandato_municipio",
+                    "columns": [
+                        "municipio_id"
+                    ],
+                    "referenced_table": "municipio",
+                    "referenced_columns": [
+                        "id"
+                    ],
+                    "on_update": "RESTRICT",
+                    "on_delete": "RESTRICT"
+                },
+                {
+                    "name": "fk_mandato_partido",
+                    "columns": [
+                        "partido_id"
+                    ],
+                    "referenced_table": "partido",
+                    "referenced_columns": [
+                        "id"
+                    ],
+                    "on_update": "RESTRICT",
+                    "on_delete": "RESTRICT"
+                },
+                {
+                    "name": "fk_mandato_prefeito",
+                    "columns": [
+                        "prefeito_id"
+                    ],
+                    "referenced_table": "prefeito",
+                    "referenced_columns": [
+                        "id"
+                    ],
+                    "on_update": "RESTRICT",
+                    "on_delete": "RESTRICT"
+                }
+            ]
+        },
+        "migrations": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "int unsigned",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "migration",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "batch",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "municipio": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "legacy_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "regiao_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "nome",
+                    "column_type": "varchar(120)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "uf",
+                    "column_type": "char(2)",
+                    "data_type": "char",
+                    "nullable": false,
+                    "default": "PA",
+                    "extra": ""
+                },
+                {
+                    "name": "codigo_ibge",
+                    "column_type": "char(7)",
+                    "data_type": "char",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "codigo_tse",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "codigo_sigplan",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "idx_municipio_ibge",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "codigo_ibge"
+                    ]
+                },
+                {
+                    "name": "idx_municipio_nome",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "nome"
+                    ]
+                },
+                {
+                    "name": "idx_municipio_regiao",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "regiao_id"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                },
+                {
+                    "name": "uq_municipio_ibge_uf",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "codigo_ibge",
+                        "uf"
+                    ]
+                },
+                {
+                    "name": "uq_municipio_nome_uf",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "nome",
+                        "uf"
+                    ]
+                },
+                {
+                    "name": "uq_municipio_tse_uf",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "codigo_tse",
+                        "uf"
+                    ]
+                }
+            ],
+            "foreign_keys": [
+                {
+                    "name": "fk_municipio_regiao",
+                    "columns": [
+                        "regiao_id"
+                    ],
+                    "referenced_table": "regiao_integracao",
+                    "referenced_columns": [
+                        "id"
+                    ],
+                    "on_update": "RESTRICT",
+                    "on_delete": "RESTRICT"
+                }
+            ]
+        },
+        "orgao": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "sigla",
+                    "column_type": "varchar(20)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "nome",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "codigo_sigplan",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                },
+                {
+                    "name": "deleted_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "is_active",
+                    "column_type": "tinyint(1)",
+                    "data_type": "tinyint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "VIRTUAL GENERATED"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "orgao_sigla_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "sigla"
+                    ]
+                },
+                {
+                    "name": "orgao_sigla_unique_active",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "sigla",
+                        "is_active"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "parcela": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "convenio_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "numero",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "valor_previsto",
+                    "column_type": "decimal(15,2)",
+                    "data_type": "decimal",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "valor_pago",
+                    "column_type": "decimal(15,2)",
+                    "data_type": "decimal",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "data_pagamento",
+                    "column_type": "date",
+                    "data_type": "date",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "nota_empenho",
+                    "column_type": "varchar(50)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "data_ne",
+                    "column_type": "date",
+                    "data_type": "date",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "valor_empenhado",
+                    "column_type": "decimal(15,2)",
+                    "data_type": "decimal",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "situacao",
+                    "column_type": "enum('PREVISTA','PAGA','CANCELADA')",
+                    "data_type": "enum",
+                    "nullable": false,
+                    "default": "PREVISTA",
+                    "extra": ""
+                },
+                {
+                    "name": "observacoes",
+                    "column_type": "text",
+                    "data_type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                },
+                {
+                    "name": "deleted_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "is_active",
+                    "column_type": "tinyint(1)",
+                    "data_type": "tinyint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "VIRTUAL GENERATED"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "parcela_convenio_id_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "convenio_id"
+                    ]
+                },
+                {
+                    "name": "parcela_convenio_numero_unique_active",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "convenio_id",
+                        "numero",
+                        "is_active"
+                    ]
+                },
+                {
+                    "name": "parcela_convenio_situacao_data_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "convenio_id",
+                        "situacao",
+                        "data_pagamento"
+                    ]
+                },
+                {
+                    "name": "parcela_nota_empenho_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "nota_empenho"
+                    ]
+                },
+                {
+                    "name": "parcela_situacao_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "situacao"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                }
+            ],
+            "foreign_keys": [
+                {
+                    "name": "parcela_convenio_id_foreign",
+                    "columns": [
+                        "convenio_id"
+                    ],
+                    "referenced_table": "convenio",
+                    "referenced_columns": [
+                        "id"
+                    ],
+                    "on_update": "NO ACTION",
+                    "on_delete": "CASCADE"
+                }
+            ]
+        },
+        "partido": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "legacy_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "numero",
+                    "column_type": "smallint",
+                    "data_type": "smallint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "sigla",
+                    "column_type": "varchar(10)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "nome",
+                    "column_type": "varchar(120)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                },
+                {
+                    "name": "uq_partido_numero",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "numero"
+                    ]
+                },
+                {
+                    "name": "uq_partido_sigla",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "sigla"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "password_reset_tokens": {
+            "columns": [
+                {
+                    "name": "email",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "token",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "email"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "prefeito": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "legacy_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "nome_completo",
+                    "column_type": "varchar(200)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "nome_urna",
+                    "column_type": "varchar(200)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "dt_nascimento",
+                    "column_type": "date",
+                    "data_type": "date",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "idx_prefeito_nome",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "nome_completo"
+                    ]
+                },
+                {
+                    "name": "idx_prefeito_urna",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "nome_urna"
+                    ]
+                },
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "regiao_integracao": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "legacy_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "descricao",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "datetime",
+                    "data_type": "datetime",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                },
+                {
+                    "name": "uq_regiao_descricao",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "descricao"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "sessions": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "user_id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "ip_address",
+                    "column_type": "varchar(45)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "user_agent",
+                    "column_type": "text",
+                    "data_type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "payload",
+                    "column_type": "longtext",
+                    "data_type": "longtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "last_activity",
+                    "column_type": "int",
+                    "data_type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                },
+                {
+                    "name": "sessions_last_activity_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "last_activity"
+                    ]
+                },
+                {
+                    "name": "sessions_user_id_index",
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        },
+        "users": {
+            "columns": [
+                {
+                    "name": "id",
+                    "column_type": "bigint unsigned",
+                    "data_type": "bigint",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment"
+                },
+                {
+                    "name": "name",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "email",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "email_verified_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "password",
+                    "column_type": "varchar(255)",
+                    "data_type": "varchar",
+                    "nullable": false,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "remember_token",
+                    "column_type": "varchar(100)",
+                    "data_type": "varchar",
+                    "nullable": true,
+                    "default": null,
+                    "extra": ""
+                },
+                {
+                    "name": "created_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED"
+                },
+                {
+                    "name": "updated_at",
+                    "column_type": "timestamp",
+                    "data_type": "timestamp",
+                    "nullable": false,
+                    "default": "CURRENT_TIMESTAMP",
+                    "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "PRIMARY",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ]
+                },
+                {
+                    "name": "users_email_unique",
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "email"
+                    ]
+                }
+            ],
+            "foreign_keys": []
+        }
+    }
+}
