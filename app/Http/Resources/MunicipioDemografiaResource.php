@@ -17,7 +17,6 @@ class MunicipioDemografiaResource extends JsonResource
             'eleitores' => $this->eleitores,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
-            'deleted_at' => $this->deleted_at?->format('Y-m-d H:i:s'),
             'municipio' => MunicipioResource::make($this->whenLoaded('municipio')),
         ];
     }

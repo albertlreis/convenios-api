@@ -4,12 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Prefeito extends Model
 {
-    use SoftDeletes;
-
     protected $table = 'prefeito';
 
     protected $guarded = [];
@@ -17,7 +14,7 @@ class Prefeito extends Model
     protected function casts(): array
     {
         return [
-            'data_nascimento' => 'date:Y-m-d',
+            'dt_nascimento' => 'date:Y-m-d',
         ];
     }
 

@@ -10,17 +10,19 @@ class StorePartidoRequest extends ApiFormRequest
     {
         return [
             'sigla' => [
-                'nullable',
+                'required',
                 'string',
-                'max:20',
-                Rule::unique('partido', 'sigla')->where(fn ($query) => $query->whereNull('deleted_at')),
+                'max:10',
+                Rule::unique('partido', 'sigla'),
             ],
-            'nome' => ['nullable', 'string', 'max:255'],
+            'legacy_id' => ['nullable', 'integer', 'min:0'],
+            'nome' => ['nullable', 'string', 'max:120'],
             'numero' => [
                 'nullable',
                 'integer',
                 'min:0',
-                Rule::unique('partido', 'numero')->where(fn ($query) => $query->whereNull('deleted_at')),
+                'max:32767',
+                Rule::unique('partido', 'numero'),
             ],
         ];
     }

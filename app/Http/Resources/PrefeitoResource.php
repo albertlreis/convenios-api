@@ -11,14 +11,12 @@ class PrefeitoResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'legacy_id' => $this->legacy_id,
             'nome_completo' => $this->nome_completo,
             'nome_urna' => $this->nome_urna,
-            'data_nascimento' => $this->data_nascimento?->format('Y-m-d'),
-            'cpf_hash' => $this->cpf_hash,
-            'chave' => $this->chave,
+            'dt_nascimento' => $this->dt_nascimento?->format('Y-m-d'),
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
-            'deleted_at' => $this->deleted_at?->format('Y-m-d H:i:s'),
             'mandatos' => MandatoResource::collection($this->whenLoaded('mandatos')),
         ];
     }

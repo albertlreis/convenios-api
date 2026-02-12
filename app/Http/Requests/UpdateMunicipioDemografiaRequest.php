@@ -9,22 +9,23 @@ class UpdateMunicipioDemografiaRequest extends ApiFormRequest
     public function rules(): array
     {
         $demografiaId = $this->route('municipioDemografia')?->id ?? $this->route('municipioDemografia');
+        $municipioId = $this->input('municipio_id') ?? $this->route('municipioDemografia')?->municipio_id;
 
         return [
-            'municipio_id' => ['nullable', Rule::exists('municipio', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
+            'municipio_id' => ['sometimes', 'required', Rule::exists('municipio', 'id')],
             'ano_ref' => [
-                'nullable',
+                'sometimes',
+                'required',
                 'integer',
                 'min:1900',
-                Rule::unique('municipio_demografia', 'ano_ref')
+                Rule::unique('demografia_municipio', 'ano_ref')
                     ->ignore($demografiaId)
-                    ->where(function ($query): void {
-                        $query->where('municipio_id', $this->input('municipio_id'))
-                            ->whereNull('deleted_at');
+                    ->where(function ($query) use ($municipioId): void {
+                        $query->where('municipio_id', $municipioId);
                     }),
             ],
-            'populacao' => ['nullable', 'integer', 'min:0'],
-            'eleitores' => ['nullable', 'integer', 'min:0'],
+            'populacao' => ['sometimes', 'required', 'integer', 'min:0'],
+            'eleitores' => ['sometimes', 'nullable', 'integer', 'min:0'],
         ];
     }
 }

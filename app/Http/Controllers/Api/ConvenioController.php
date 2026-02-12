@@ -8,7 +8,6 @@ use App\Http\Requests\UpdateConvenioRequest;
 use App\Http\Resources\ConvenioResource;
 use App\Http\Resources\ParcelaResource;
 use App\Models\Convenio;
-use App\Models\MandatoPrefeito;
 use App\Support\LatestMunicipioDemografia;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
@@ -27,8 +26,7 @@ class ConvenioController extends Controller
                 'municipioConvenente',
             ])
             ->leftJoin('municipio as municipio_beneficiario', function ($join): void {
-                $join->on('municipio_beneficiario.id', '=', 'convenio.municipio_beneficiario_id')
-                    ->whereNull('municipio_beneficiario.deleted_at');
+                $join->on('municipio_beneficiario.id', '=', 'convenio.municipio_beneficiario_id');
             })
             ->leftJoin('orgao as orgao_rel', function ($join): void {
                 $join->on('orgao_rel.id', '=', 'convenio.orgao_id')
@@ -235,18 +233,10 @@ class ConvenioController extends Controller
 
         return DB::table('mandato_prefeito as mandato_vigente')
             ->from('mandato_prefeito as mandato_vigente')
-            ->leftJoin('prefeito as prefeito_vigente', function ($join): void {
-                $join->on('prefeito_vigente.id', '=', 'mandato_vigente.prefeito_id')
-                    ->whereNull('prefeito_vigente.deleted_at');
-            })
-            ->leftJoin('partido as partido_vigente', function ($join): void {
-                $join->on('partido_vigente.id', '=', 'mandato_vigente.partido_id')
-                    ->whereNull('partido_vigente.deleted_at');
-            })
-            ->whereNull('mandato_vigente.deleted_at')
-            ->whereDate('mandato_vigente.inicio', '<=', $hoje)
-            ->whereDate('mandato_vigente.fim', '>=', $hoje)
-            ->whereIn('mandato_vigente.situacao', MandatoPrefeito::SITUACOES_VIGENTES)
+            ->leftJoin('prefeito as prefeito_vigente', 'prefeito_vigente.id', '=', 'mandato_vigente.prefeito_id')
+            ->leftJoin('partido as partido_vigente', 'partido_vigente.id', '=', 'mandato_vigente.partido_id')
+            ->whereDate('mandato_vigente.mandato_inicio', '<=', $hoje)
+            ->whereDate('mandato_vigente.mandato_fim', '>=', $hoje)
             ->selectRaw('mandato_vigente.municipio_id')
             ->selectRaw('MIN(prefeito_vigente.nome_completo) as prefeito_nome')
             ->selectRaw('MIN(partido_vigente.sigla) as partido_sigla')
@@ -259,9 +249,7 @@ class ConvenioController extends Controller
         $subquery->selectRaw('1')
             ->from('mandato_prefeito as mandato_vigente')
             ->whereColumn('mandato_vigente.municipio_id', 'convenio.municipio_beneficiario_id')
-            ->whereNull('mandato_vigente.deleted_at')
-            ->whereDate('mandato_vigente.inicio', '<=', now()->toDateString())
-            ->whereDate('mandato_vigente.fim', '>=', now()->toDateString())
-            ->whereIn('mandato_vigente.situacao', MandatoPrefeito::SITUACOES_VIGENTES);
+            ->whereDate('mandato_vigente.mandato_inicio', '<=', now()->toDateString())
+            ->whereDate('mandato_vigente.mandato_fim', '>=', now()->toDateString());
     }
 }

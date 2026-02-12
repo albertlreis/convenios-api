@@ -11,34 +11,30 @@ class StoreMunicipioRequest extends ApiFormRequest
         $uf = $this->input('uf', 'PA');
 
         return [
-            'legacy_id' => [
-                'nullable',
-                'integer',
-                Rule::unique('municipio', 'legacy_id')
-                    ->where(fn ($query) => $query->where('uf', $uf)->whereNull('deleted_at')),
-            ],
-            'regiao_id' => ['nullable', Rule::exists('regiao_integracao', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
+            'legacy_id' => ['nullable', 'integer', 'min:0'],
+            'regiao_id' => ['nullable', Rule::exists('regiao_integracao', 'id')],
             'nome' => [
-                'nullable',
+                'required',
                 'string',
-                'max:255',
+                'max:120',
                 Rule::unique('municipio', 'nome')
-                    ->where(fn ($query) => $query->where('uf', $uf)->whereNull('deleted_at')),
+                    ->where(fn ($query) => $query->where('uf', $uf)),
             ],
             'uf' => ['nullable', 'string', 'size:2'],
             'codigo_ibge' => [
                 'nullable',
                 'regex:/^[0-9]{7}$/',
                 Rule::unique('municipio', 'codigo_ibge')
-                    ->where(fn ($query) => $query->where('uf', $uf)->whereNull('deleted_at')),
+                    ->where(fn ($query) => $query->where('uf', $uf)),
             ],
             'codigo_tse' => [
                 'nullable',
                 'integer',
                 'min:0',
                 Rule::unique('municipio', 'codigo_tse')
-                    ->where(fn ($query) => $query->where('uf', $uf)->whereNull('deleted_at')),
+                    ->where(fn ($query) => $query->where('uf', $uf)),
             ],
+            'codigo_sigplan' => ['nullable', 'integer'],
         ];
     }
 }

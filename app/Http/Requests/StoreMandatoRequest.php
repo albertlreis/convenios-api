@@ -9,15 +9,27 @@ class StoreMandatoRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'municipio_id' => ['nullable', Rule::exists('municipio', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
-            'prefeito_id' => ['nullable', Rule::exists('prefeito', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
-            'partido_id' => ['nullable', Rule::exists('partido', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
-            'eleicao_id' => ['nullable', Rule::exists('eleicao', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
-            'inicio' => ['nullable', 'date_format:Y-m-d'],
-            'fim' => ['nullable', 'date_format:Y-m-d'],
-            'mandato_consecutivo' => ['nullable', Rule::in([1, 2])],
+            'legacy_id' => ['nullable', 'integer', 'min:0'],
+            'municipio_id' => ['required', Rule::exists('municipio', 'id')],
+            'prefeito_id' => ['required', Rule::exists('prefeito', 'id')],
+            'partido_id' => ['nullable', Rule::exists('partido', 'id')],
+            'ano_eleicao' => ['required', 'integer', 'min:1900', 'max:2100'],
+            'cd_eleicao' => ['required', 'integer'],
+            'dt_eleicao' => [
+                'required',
+                'date_format:Y-m-d',
+                Rule::unique('mandato_prefeito', 'dt_eleicao')->where(function ($query): void {
+                    $query->where('municipio_id', $this->input('municipio_id'))
+                        ->where('ano_eleicao', $this->input('ano_eleicao'))
+                        ->where('nr_turno', $this->input('nr_turno'));
+                }),
+            ],
+            'nr_turno' => ['required', 'integer', Rule::in([1, 2])],
+            'nr_candidato' => ['nullable', 'integer', 'min:0'],
+            'mandato_inicio' => ['required', 'date_format:Y-m-d'],
+            'mandato_fim' => ['required', 'date_format:Y-m-d', 'after_or_equal:mandato_inicio'],
+            'mandato_consecutivo' => ['nullable', 'integer', Rule::in([1, 2])],
             'reeleito' => ['nullable', 'boolean'],
-            'situacao' => ['nullable', Rule::in(['EM_EXERCICIO', 'AFASTADO', 'CASSADO', 'INTERINO', 'ENCERRADO'])],
         ];
     }
 }

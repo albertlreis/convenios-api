@@ -28,10 +28,7 @@ class MunicipioIndicadoresController extends Controller
         $query = RegiaoIntegracao::query()
             ->selectRaw('regiao_integracao.id')
             ->selectRaw('regiao_integracao.descricao')
-            ->leftJoin('municipio', function ($join): void {
-                $join->on('municipio.regiao_id', '=', 'regiao_integracao.id')
-                    ->whereNull('municipio.deleted_at');
-            })
+            ->leftJoin('municipio', 'municipio.regiao_id', '=', 'regiao_integracao.id')
             ->groupBy('regiao_integracao.id', 'regiao_integracao.descricao')
             ->orderBy('regiao_integracao.descricao');
 

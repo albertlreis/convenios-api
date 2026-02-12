@@ -4,13 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class MunicipioDemografia extends Model
 {
-    use SoftDeletes;
-
-    protected $table = 'municipio_demografia';
+    protected $table = 'demografia_municipio';
 
     protected $guarded = [];
 

@@ -9,17 +9,16 @@ class StoreMunicipioDemografiaRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'municipio_id' => ['nullable', Rule::exists('municipio', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
+            'municipio_id' => ['required', Rule::exists('municipio', 'id')],
             'ano_ref' => [
-                'nullable',
+                'required',
                 'integer',
                 'min:1900',
-                Rule::unique('municipio_demografia', 'ano_ref')->where(function ($query): void {
-                    $query->where('municipio_id', $this->input('municipio_id'))
-                        ->whereNull('deleted_at');
+                Rule::unique('demografia_municipio', 'ano_ref')->where(function ($query): void {
+                    $query->where('municipio_id', $this->input('municipio_id'));
                 }),
             ],
-            'populacao' => ['nullable', 'integer', 'min:0'],
+            'populacao' => ['required', 'integer', 'min:0'],
             'eleitores' => ['nullable', 'integer', 'min:0'],
         ];
     }

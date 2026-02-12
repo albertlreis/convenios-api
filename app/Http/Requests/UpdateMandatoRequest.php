@@ -8,16 +8,36 @@ class UpdateMandatoRequest extends ApiFormRequest
 {
     public function rules(): array
     {
+        $mandatoId = $this->route('mandato')?->id ?? $this->route('mandato');
+        $municipioId = $this->input('municipio_id') ?? $this->route('mandato')?->municipio_id;
+        $anoEleicao = $this->input('ano_eleicao') ?? $this->route('mandato')?->ano_eleicao;
+        $nrTurno = $this->input('nr_turno') ?? $this->route('mandato')?->nr_turno;
+
         return [
-            'municipio_id' => ['nullable', Rule::exists('municipio', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
-            'prefeito_id' => ['nullable', Rule::exists('prefeito', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
-            'partido_id' => ['nullable', Rule::exists('partido', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
-            'eleicao_id' => ['nullable', Rule::exists('eleicao', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
-            'inicio' => ['nullable', 'date_format:Y-m-d'],
-            'fim' => ['nullable', 'date_format:Y-m-d'],
-            'mandato_consecutivo' => ['nullable', Rule::in([1, 2])],
-            'reeleito' => ['nullable', 'boolean'],
-            'situacao' => ['nullable', Rule::in(['EM_EXERCICIO', 'AFASTADO', 'CASSADO', 'INTERINO', 'ENCERRADO'])],
+            'legacy_id' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'municipio_id' => ['sometimes', 'required', Rule::exists('municipio', 'id')],
+            'prefeito_id' => ['sometimes', 'required', Rule::exists('prefeito', 'id')],
+            'partido_id' => ['sometimes', 'nullable', Rule::exists('partido', 'id')],
+            'ano_eleicao' => ['sometimes', 'required', 'integer', 'min:1900', 'max:2100'],
+            'cd_eleicao' => ['sometimes', 'required', 'integer'],
+            'dt_eleicao' => [
+                'sometimes',
+                'required',
+                'date_format:Y-m-d',
+                Rule::unique('mandato_prefeito', 'dt_eleicao')
+                    ->ignore($mandatoId)
+                    ->where(function ($query) use ($municipioId, $anoEleicao, $nrTurno): void {
+                        $query->where('municipio_id', $municipioId)
+                            ->where('ano_eleicao', $anoEleicao)
+                            ->where('nr_turno', $nrTurno);
+                    }),
+            ],
+            'nr_turno' => ['sometimes', 'required', 'integer', Rule::in([1, 2])],
+            'nr_candidato' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'mandato_inicio' => ['sometimes', 'required', 'date_format:Y-m-d'],
+            'mandato_fim' => ['sometimes', 'required', 'date_format:Y-m-d', 'after_or_equal:mandato_inicio'],
+            'mandato_consecutivo' => ['sometimes', 'nullable', 'integer', Rule::in([1, 2])],
+            'reeleito' => ['sometimes', 'nullable', 'boolean'],
         ];
     }
 }

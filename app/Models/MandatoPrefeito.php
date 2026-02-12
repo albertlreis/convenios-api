@@ -6,18 +6,9 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class MandatoPrefeito extends Model
 {
-    use SoftDeletes;
-
-    public const SITUACOES_VIGENTES = [
-        'EM_EXERCICIO',
-        'AFASTADO',
-        'INTERINO',
-    ];
-
     protected $table = 'mandato_prefeito';
 
     protected $guarded = [];
@@ -25,8 +16,13 @@ class MandatoPrefeito extends Model
     protected function casts(): array
     {
         return [
-            'inicio' => 'date:Y-m-d',
-            'fim' => 'date:Y-m-d',
+            'ano_eleicao' => 'integer',
+            'cd_eleicao' => 'integer',
+            'dt_eleicao' => 'date:Y-m-d',
+            'nr_turno' => 'integer',
+            'nr_candidato' => 'integer',
+            'mandato_inicio' => 'date:Y-m-d',
+            'mandato_fim' => 'date:Y-m-d',
             'mandato_consecutivo' => 'integer',
             'reeleito' => 'boolean',
         ];
@@ -37,9 +33,8 @@ class MandatoPrefeito extends Model
         $hoje = $data ? Carbon::parse($data)->toDateString() : now()->toDateString();
 
         return $query
-            ->whereDate('inicio', '<=', $hoje)
-            ->whereDate('fim', '>=', $hoje)
-            ->whereIn('situacao', self::SITUACOES_VIGENTES);
+            ->whereDate('mandato_inicio', '<=', $hoje)
+            ->whereDate('mandato_fim', '>=', $hoje);
     }
 
     public function municipio(): BelongsTo
@@ -55,10 +50,5 @@ class MandatoPrefeito extends Model
     public function partido(): BelongsTo
     {
         return $this->belongsTo(Partido::class, 'partido_id');
-    }
-
-    public function eleicao(): BelongsTo
-    {
-        return $this->belongsTo(Eleicao::class, 'eleicao_id');
     }
 }

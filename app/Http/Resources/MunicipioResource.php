@@ -17,9 +17,9 @@ class MunicipioResource extends JsonResource
             'uf' => $this->uf,
             'codigo_ibge' => $this->codigo_ibge,
             'codigo_tse' => $this->codigo_tse,
+            'codigo_sigplan' => $this->codigo_sigplan,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
-            'deleted_at' => $this->deleted_at?->format('Y-m-d H:i:s'),
             'regiao_integracao' => RegiaoIntegracaoResource::make($this->whenLoaded('regiaoIntegracao')),
             'demografias' => MunicipioDemografiaResource::collection($this->whenLoaded('demografias')),
         ];

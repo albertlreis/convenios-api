@@ -12,14 +12,16 @@ class UpdateOrgaoRequest extends ApiFormRequest
 
         return [
             'sigla' => [
-                'nullable',
+                'sometimes',
+                'required',
                 'string',
                 'max:20',
                 Rule::unique('orgao', 'sigla')
                     ->ignore($orgaoId)
                     ->where(fn ($query) => $query->whereNull('deleted_at')),
             ],
-            'nome' => ['nullable', 'string', 'max:255'],
+            'nome' => ['sometimes', 'required', 'string', 'max:255'],
+            'codigo_sigplan' => ['sometimes', 'nullable', 'integer'],
         ];
     }
 }

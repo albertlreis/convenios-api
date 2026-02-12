@@ -12,21 +12,23 @@ class UpdatePartidoRequest extends ApiFormRequest
 
         return [
             'sigla' => [
-                'nullable',
+                'sometimes',
+                'required',
                 'string',
-                'max:20',
+                'max:10',
                 Rule::unique('partido', 'sigla')
-                    ->ignore($partidoId)
-                    ->where(fn ($query) => $query->whereNull('deleted_at')),
+                    ->ignore($partidoId),
             ],
-            'nome' => ['nullable', 'string', 'max:255'],
+            'legacy_id' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'nome' => ['sometimes', 'nullable', 'string', 'max:120'],
             'numero' => [
+                'sometimes',
                 'nullable',
                 'integer',
                 'min:0',
+                'max:32767',
                 Rule::unique('partido', 'numero')
-                    ->ignore($partidoId)
-                    ->where(fn ($query) => $query->whereNull('deleted_at')),
+                    ->ignore($partidoId),
             ],
         ];
     }
