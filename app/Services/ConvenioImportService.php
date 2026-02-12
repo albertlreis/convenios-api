@@ -35,7 +35,6 @@ class ConvenioImportService
                 'convenente' => ['convenente'],
                 'numero_convenio' => ['numero_convenio'],
                 'ano' => ['ano'],
-                'plano_interno' => ['plano_interno'],
                 'objeto' => ['objeto'],
                 'grupo_despesa' => ['grupo_despesa'],
                 'data_inicio' => ['data_inicio'],
@@ -243,11 +242,6 @@ class ConvenioImportService
 
                     $convenioIdByNumero[$numeroConvenio] = $convenio->id;
 
-                    $planoInterno = $this->normalizeString($data['plano_interno'] ?? null);
-                    if ($planoInterno !== null) {
-                        $this->upsertPlanoInterno($convenio->id, $planoInterno, 'lista');
-                    }
-
                     if ($orgaoNome !== null && $orgao === null) {
                         $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', ['orgao' => $orgaoNome]);
                         $counters['pendencias']++;
@@ -446,6 +440,18 @@ class ConvenioImportService
                 $normalizedData[$targetField] = $this->normalizeValue($targetField, $value, $issues);
             }
 
+            if ($sheetName === 'lista' && $this->rowHasValueForAliases($row, $headerMap, ['plano_interno'])) {
+                $normalizedData['plano_interno'] = null;
+                $normalizedData['ignored_columns'] = array_merge($normalizedData['ignored_columns'] ?? [], [
+                    'plano_interno' => true,
+                ]);
+                $issues[] = [
+                    'type' => 'ignored_column',
+                    'field' => 'plano_interno',
+                    'message' => 'Coluna plano_interno da aba lista foi ignorada (PI vem da aba plano_interno).',
+                ];
+            }
+
             if (in_array($sheetName, ['lista', 'parcelas', 'plano_interno'], true) && $normalizedData['numero_convenio'] === null) {
                 $issues[] = 'numero_convenio_ausente';
             }
@@ -517,7 +523,29 @@ class ConvenioImportService
     }
 
     /**
-     * @param  array<int, string>  $issues
+     * @param  array<string, mixed>  $row
+     * @param  array<string, string>  $headerMap
+     * @param  array<int, string>  $aliases
+     */
+    private function rowHasValueForAliases(array $row, array $headerMap, array $aliases): bool
+    {
+        foreach ($aliases as $alias) {
+            $headerKey = $this->normalizeHeaderKey($alias);
+            if (! isset($headerMap[$headerKey])) {
+                continue;
+            }
+
+            $value = $row[$headerMap[$headerKey]] ?? null;
+            if ($this->normalizeString($value) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, string|array<string, string>>  $issues
      */
     private function normalizeValue(string $field, mixed $value, array &$issues): mixed
     {
@@ -583,7 +611,7 @@ class ConvenioImportService
     }
 
     /**
-     * @param  array<int, string>|null  $issues
+     * @param  array<int, string|array<string, string>>|null  $issues
      */
     private function normalizeDate(mixed $value, ?array &$issues = null, string $field = 'data'): ?string
     {
