@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ConvenioImportListaRow;
 use App\Models\Municipio;
 use App\Models\Orgao;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -158,6 +159,78 @@ class ConvenioImportFlowTest extends TestCase
         ]);
     }
 
+    public function test_pi_da_aba_lista_e_ignorado_e_pi_vem_somente_da_aba_dedicada(): void
+    {
+        Orgao::query()->create([
+            'sigla' => 'SETESTE',
+            'nome' => 'Secretaria de Teste',
+        ]);
+
+        Municipio::query()->create([
+            'regiao_id' => null,
+            'nome' => 'Municipio Bom',
+            'uf' => 'PA',
+            'codigo_ibge' => '1500001',
+            'codigo_tse' => 1001,
+        ]);
+
+        $file = $this->buildImportFile(
+            listaRows: [
+                [
+                    'orgao' => 'SETESTE',
+                    'municipio' => 'Municipio Bom',
+                    'convenente' => 'Municipio Bom',
+                    'numero_convenio' => 'CV-300/2026',
+                    'ano' => '2026',
+                    'plano_interno' => 'PI000000010',
+                ],
+            ],
+            parcelasRows: [],
+            piRows: [
+                [
+                    'numero_convenio' => 'CV-300/2026',
+                    'plano_interno' => ' pi000000999 ',
+                ],
+            ]
+        );
+
+        $upload = $this->postJson('/api/v1/imports/convenios/upload', ['arquivo' => $file])->assertCreated();
+        $importId = $upload->json('data.id');
+        $this->assertNotNull($importId);
+
+        $listaRow = ConvenioImportListaRow::query()
+            ->where('import_id', $importId)
+            ->firstOrFail();
+
+        $this->assertSame('PI000000010', $listaRow->raw_data['plano_interno'] ?? null);
+        $this->assertNull($listaRow->normalized_data['plano_interno'] ?? null);
+        $this->assertTrue((bool) data_get($listaRow->normalized_data, 'ignored_columns.plano_interno', false));
+
+        $ignoredIssue = collect($listaRow->issues ?? [])->first(
+            fn (mixed $issue): bool => is_array($issue)
+                && ($issue['type'] ?? null) === 'ignored_column'
+                && ($issue['field'] ?? null) === 'plano_interno'
+        );
+
+        $this->assertNotNull($ignoredIssue);
+        $this->assertSame(
+            'Coluna plano_interno da aba lista foi ignorada (PI vem da aba plano_interno).',
+            $ignoredIssue['message'] ?? null
+        );
+
+        $this->postJson('/api/v1/imports/convenios/confirm', ['import_id' => $importId])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'confirmed');
+
+        $this->assertDatabaseHas('convenio', ['numero_convenio' => 'CV-300/2026']);
+        $this->assertDatabaseHas('convenio_plano_interno', [
+            'plano_interno' => 'PI000000999',
+        ]);
+        $this->assertDatabaseMissing('convenio_plano_interno', [
+            'plano_interno' => 'PI000000010',
+        ]);
+    }
+
     private function buildImportFile(array $listaRows, array $parcelasRows, array $piRows): UploadedFile
     {
         $spreadsheet = new Spreadsheet;
@@ -213,4 +286,3 @@ class ConvenioImportFlowTest extends TestCase
         }
     }
 }
-
