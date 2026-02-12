@@ -2,7 +2,6 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -13,6 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('municipio', function (Blueprint $table) {
+            $table->engine = 'InnoDB';
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_unicode_ci';
             $table->id();
@@ -24,7 +24,7 @@ return new class extends Migration
             $table->integer('codigo_tse')->nullable();
             $table->integer('codigo_sigplan')->nullable();
             $table->dateTime('created_at')->useCurrent();
-            $table->dateTime('updated_at')->nullable();
+            $table->dateTime('updated_at')->useCurrent()->useCurrentOnUpdate();
 
             $table->unique(['nome', 'uf'], 'uq_municipio_nome_uf');
             $table->unique(['codigo_ibge', 'uf'], 'uq_municipio_ibge_uf');
@@ -34,8 +34,6 @@ return new class extends Migration
             $table->index('regiao_id', 'idx_municipio_regiao');
             $table->foreign('regiao_id', 'fk_municipio_regiao')->references('id')->on('regiao_integracao')->restrictOnUpdate()->restrictOnDelete();
         });
-
-        DB::statement('ALTER TABLE `municipio` MODIFY `updated_at` DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP');
     }
 
     /**

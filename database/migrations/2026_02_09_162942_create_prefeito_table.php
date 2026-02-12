@@ -2,7 +2,6 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -13,6 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('prefeito', function (Blueprint $table) {
+            $table->engine = 'InnoDB';
             $table->charset = 'utf8mb4';
             $table->collation = 'utf8mb4_unicode_ci';
             $table->id();
@@ -21,13 +21,11 @@ return new class extends Migration
             $table->string('nome_urna', 200)->nullable();
             $table->date('dt_nascimento')->nullable();
             $table->dateTime('created_at')->useCurrent();
-            $table->dateTime('updated_at')->nullable();
+            $table->dateTime('updated_at')->useCurrent()->useCurrentOnUpdate();
 
             $table->index('nome_completo', 'idx_prefeito_nome');
             $table->index('nome_urna', 'idx_prefeito_urna');
         });
-
-        DB::statement('ALTER TABLE `prefeito` MODIFY `updated_at` DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP');
     }
 
     /**

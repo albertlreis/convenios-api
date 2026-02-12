@@ -30,7 +30,8 @@ return new class extends Migration
             $table->decimal('valor_total_informado', 15, 2)->nullable();
             $table->decimal('valor_total_calculado', 15, 2)->nullable();
             $table->json('metadata')->nullable();
-            $table->timestamps();
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
             $table->softDeletes();
             $table->boolean('is_active')->virtualAs('IF(deleted_at IS NULL, 1, NULL)');
 
