@@ -23,6 +23,20 @@ class ConvenioImportController extends Controller
         return $this->asJson($this->loadPreview($import), 'Arquivo importado para staging.', 201);
     }
 
+    public function index(): JsonResponse
+    {
+        $imports = ConvenioImport::query()
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get();
+
+        return response()->json([
+            'sucesso' => true,
+            'mensagem' => 'Historico de importacoes.',
+            'data' => $imports->map(fn (ConvenioImport $import) => ConvenioImportResource::make($import)->resolve()),
+        ]);
+    }
+
     public function confirm(ConfirmConvenioImportRequest $request): JsonResponse
     {
         $import = ConvenioImport::query()->findOrFail($request->integer('import_id'));
@@ -59,4 +73,3 @@ class ConvenioImportController extends Controller
         ], $status);
     }
 }
-

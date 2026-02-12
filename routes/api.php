@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function (): void {
     Route::get('health', fn () => ['status' => 'ok']);
 
+    Route::get('imports/convenios', [ConvenioImportController::class, 'index']);
     Route::post('imports/convenios/upload', [ConvenioImportController::class, 'upload']);
     Route::post('imports/convenios/confirm', [ConvenioImportController::class, 'confirm']);
     Route::get('imports/convenios/{id}', [ConvenioImportController::class, 'show']);
