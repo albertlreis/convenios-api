@@ -24,7 +24,7 @@ class ParcelaPatchPagamentoTest extends TestCase
             'situacao' => 'PREVISTA',
         ]);
 
-        $this->patchJson("/api/parcelas/{$parcela->id}/pagamento", [
+        $this->patchJson("/api/v1/parcelas/{$parcela->id}/pagamento", [
             'data_pagamento' => '2026-02-01',
             'valor_pago' => 1000.00,
             'nota_empenho' => 'NE-12345',

@@ -66,12 +66,12 @@ class ConvenioFiltersTest extends TestCase
             'situacao' => 'PAGA',
         ]);
 
-        $this->getJson('/api/convenios?com_parcelas_em_aberto=1')
+        $this->getJson('/api/v1/convenios?com_parcelas_em_aberto=1')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $convenioAberto->id);
 
-        $this->getJson('/api/convenios?municipio_id='.$municipioB->id)
+        $this->getJson('/api/v1/convenios?municipio_id='.$municipioB->id)
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $convenioFechado->id);

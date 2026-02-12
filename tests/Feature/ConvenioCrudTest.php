@@ -33,7 +33,7 @@ class ConvenioCrudTest extends TestCase
             'valor_total_calculado' => 11000,
         ];
 
-        $createResponse = $this->postJson('/api/convenios', $payload)
+        $createResponse = $this->postJson('/api/v1/convenios', $payload)
             ->assertCreated()
             ->assertJsonPath('data.codigo', 'SE:123/2026');
 
@@ -44,16 +44,16 @@ class ConvenioCrudTest extends TestCase
             'codigo' => 'SE:123/2026',
         ]);
 
-        $this->getJson("/api/convenios/{$convenioId}")
+        $this->getJson("/api/v1/convenios/{$convenioId}")
             ->assertOk()
             ->assertJsonPath('data.id', $convenioId);
 
-        $this->patchJson("/api/convenios/{$convenioId}", [
+        $this->patchJson("/api/v1/convenios/{$convenioId}", [
             'grupo_despesa' => 'CAPITAL',
         ])->assertOk()
             ->assertJsonPath('data.grupo_despesa', 'CAPITAL');
 
-        $this->deleteJson("/api/convenios/{$convenioId}")
+        $this->deleteJson("/api/v1/convenios/{$convenioId}")
             ->assertNoContent();
 
         $this->assertSoftDeleted('convenio', [
