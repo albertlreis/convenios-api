@@ -14,6 +14,7 @@ use App\Models\Orgao;
 use App\Models\Parcela;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -62,7 +63,32 @@ class ConvenioImportService
 
     public function uploadAndParse(UploadedFile $file): ConvenioImport
     {
-        $arquivoPath = $file->store('imports/convenios', ['disk' => 'local']);
+        $disk = Storage::disk('private');
+
+        try {
+            $disk->makeDirectory('imports/convenios');
+            $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+            $extension = $file->getClientOriginalExtension() ?: 'xlsx';
+            $safeBaseName = Str::of($originalName)->ascii()->replaceMatches('/[^A-Za-z0-9_-]+/', '_')->trim('_')->limit(70, '');
+            $fileName = sprintf('%s_%s.%s', now()->format('Ymd_His'), Str::random(12), strtolower((string) $extension));
+            if ((string) $safeBaseName !== '') {
+                $fileName = sprintf('%s_%s.%s', (string) $safeBaseName, Str::random(12), strtolower((string) $extension));
+            }
+
+            $arquivoPath = $file->storeAs('imports/convenios', $fileName, 'private');
+        } catch (\Throwable $exception) {
+            Log::error('Falha ao salvar arquivo de importacao de convenios.', [
+                'disk' => 'private',
+                'disk_root' => config('filesystems.disks.private.root'),
+                'target_path' => storage_path('app/private/imports/convenios'),
+                'php_user' => get_current_user(),
+                'uid' => function_exists('posix_getuid') ? posix_getuid() : null,
+                'gid' => function_exists('posix_getgid') ? posix_getgid() : null,
+                'exception' => $exception->getMessage(),
+            ]);
+
+            throw $exception;
+        }
 
         $import = ConvenioImport::query()->create([
             'arquivo_nome' => $file->getClientOriginalName(),
@@ -70,7 +96,7 @@ class ConvenioImportService
             'status' => 'uploaded',
         ]);
 
-        $absolutePath = Storage::disk('local')->path($arquivoPath);
+        $absolutePath = $disk->path($arquivoPath);
         $spreadsheet = IOFactory::load($absolutePath);
 
         $parsedLista = $this->parseSheet($spreadsheet, 'lista', $this->expectedColumns()['lista']);
