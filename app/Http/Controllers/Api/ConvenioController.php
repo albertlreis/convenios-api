@@ -43,6 +43,12 @@ class ConvenioController extends Controller
                 'mandato_consecutivo_sort' => DB::raw('mandato_vigente_sort.mandato_consecutivo'),
             ]);
 
+        if ($request->boolean('only_trashed')) {
+            $query->onlyTrashed();
+        } elseif ($request->boolean('with_trashed')) {
+            $query->withTrashed();
+        }
+
         LatestMunicipioDemografia::join($query, 'convenio.municipio_beneficiario_id');
 
         $query->addSelect([
@@ -171,10 +177,11 @@ class ConvenioController extends Controller
         return ConvenioResource::make($convenio)->response()->setStatusCode(201);
     }
 
-    public function show(Convenio $convenio): ConvenioResource
+    public function show(int $convenio): ConvenioResource
     {
         $convenio = Convenio::query()
-            ->whereKey($convenio->id)
+            ->withTrashed()
+            ->whereKey($convenio)
             ->with([
                 'orgao',
                 'municipioBeneficiario.regiaoIntegracao',
@@ -192,7 +199,7 @@ class ConvenioController extends Controller
         $convenio->fill($request->validated());
         $convenio->save();
 
-        return $this->show($convenio);
+        return $this->show($convenio->id);
     }
 
     public function destroy(Convenio $convenio): JsonResponse
@@ -202,8 +209,25 @@ class ConvenioController extends Controller
         return response()->json(status: 204);
     }
 
-    public function parcelas(Request $request, Convenio $convenio)
+    public function restore(int $convenio): ConvenioResource
     {
+        $convenio = Convenio::query()
+            ->withTrashed()
+            ->findOrFail($convenio);
+
+        if ($convenio->trashed()) {
+            $convenio->restore();
+        }
+
+        return $this->show($convenio->id);
+    }
+
+    public function parcelas(Request $request, int $convenio)
+    {
+        $convenio = Convenio::query()
+            ->withTrashed()
+            ->whereKey($convenio)
+            ->firstOrFail();
         $perPage = max(1, min((int) $request->query('per_page', 15), 200));
 
         $parcelas = $convenio->parcelas()
@@ -214,8 +238,12 @@ class ConvenioController extends Controller
         return ParcelaResource::collection($parcelas);
     }
 
-    public function parcelasEmAberto(Request $request, Convenio $convenio)
+    public function parcelasEmAberto(Request $request, int $convenio)
     {
+        $convenio = Convenio::query()
+            ->withTrashed()
+            ->whereKey($convenio)
+            ->firstOrFail();
         $perPage = max(1, min((int) $request->query('per_page', 15), 200));
 
         $parcelas = $convenio->parcelas()

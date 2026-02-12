@@ -23,11 +23,13 @@ Route::prefix('v1')->group(function (): void {
     Route::get('convenios/{convenio}/parcelas', [ConvenioController::class, 'parcelas']);
     Route::get('convenios/{convenio}/parcelas-em-aberto', [ConvenioController::class, 'parcelasEmAberto']);
     Route::get('convenios/{convenio}/financeiro', [FinanceiroController::class, 'showByConvenio']);
+    Route::match(['post', 'patch'], 'convenios/{convenio}/restore', [ConvenioController::class, 'restore']);
     Route::apiResource('convenios', ConvenioController::class)->parameters([
         'convenios' => 'convenio',
     ]);
 
     Route::patch('parcelas/{parcela}/pagamento', [ParcelaController::class, 'patchPagamento']);
+    Route::match(['post', 'patch'], 'parcelas/{parcela}/restore', [ParcelaController::class, 'restore']);
     Route::apiResource('parcelas', ParcelaController::class)->parameters([
         'parcelas' => 'parcela',
     ]);
@@ -41,6 +43,7 @@ Route::prefix('v1')->group(function (): void {
         'municipio-demografias' => 'municipioDemografia',
     ]);
 
+    Route::match(['post', 'patch'], 'orgaos/{orgao}/restore', [OrgaoController::class, 'restore']);
     Route::apiResource('orgaos', OrgaoController::class)->parameters([
         'orgaos' => 'orgao',
     ]);

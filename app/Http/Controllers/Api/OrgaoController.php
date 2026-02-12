@@ -16,7 +16,15 @@ class OrgaoController extends Controller
     {
         $perPage = max(1, min((int) $request->query('per_page', 15), 200));
 
-        $orgaos = Orgao::query()
+        $query = Orgao::query();
+
+        if ($request->boolean('only_trashed')) {
+            $query->onlyTrashed();
+        } elseif ($request->boolean('with_trashed')) {
+            $query->withTrashed();
+        }
+
+        $orgaos = $query
             ->orderBy('sigla')
             ->paginate($perPage)
             ->withQueryString();
@@ -31,8 +39,12 @@ class OrgaoController extends Controller
         return OrgaoResource::make($orgao)->response()->setStatusCode(201);
     }
 
-    public function show(Orgao $orgao): OrgaoResource
+    public function show(int $orgao): OrgaoResource
     {
+        $orgao = Orgao::query()
+            ->withTrashed()
+            ->whereKey($orgao)
+            ->firstOrFail();
         $orgao->load('convenios');
 
         return OrgaoResource::make($orgao);
@@ -43,7 +55,7 @@ class OrgaoController extends Controller
         $orgao->fill($request->validated());
         $orgao->save();
 
-        return $this->show($orgao);
+        return $this->show($orgao->id);
     }
 
     public function destroy(Orgao $orgao): JsonResponse
@@ -51,5 +63,18 @@ class OrgaoController extends Controller
         $orgao->delete();
 
         return response()->json(status: 204);
+    }
+
+    public function restore(int $orgao): OrgaoResource
+    {
+        $orgao = Orgao::query()
+            ->withTrashed()
+            ->findOrFail($orgao);
+
+        if ($orgao->trashed()) {
+            $orgao->restore();
+        }
+
+        return $this->show($orgao->id);
     }
 }

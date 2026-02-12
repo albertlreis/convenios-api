@@ -17,7 +17,15 @@ class ParcelaController extends Controller
     {
         $perPage = max(1, min((int) $request->query('per_page', 15), 200));
 
-        $parcelas = Parcela::query()
+        $query = Parcela::query();
+
+        if ($request->boolean('only_trashed')) {
+            $query->onlyTrashed();
+        } elseif ($request->boolean('with_trashed')) {
+            $query->withTrashed();
+        }
+
+        $parcelas = $query
             ->with('convenio')
             ->orderBy('id')
             ->paginate($perPage)
@@ -34,8 +42,12 @@ class ParcelaController extends Controller
         return ParcelaResource::make($parcela)->response()->setStatusCode(201);
     }
 
-    public function show(Parcela $parcela): ParcelaResource
+    public function show(int $parcela): ParcelaResource
     {
+        $parcela = Parcela::query()
+            ->withTrashed()
+            ->whereKey($parcela)
+            ->firstOrFail();
         $parcela->load('convenio');
 
         return ParcelaResource::make($parcela);
@@ -46,7 +58,7 @@ class ParcelaController extends Controller
         $parcela->fill($request->validated());
         $parcela->save();
 
-        return $this->show($parcela);
+        return $this->show($parcela->id);
     }
 
     public function destroy(Parcela $parcela): JsonResponse
@@ -54,6 +66,19 @@ class ParcelaController extends Controller
         $parcela->delete();
 
         return response()->json(status: 204);
+    }
+
+    public function restore(int $parcela): ParcelaResource
+    {
+        $parcela = Parcela::query()
+            ->withTrashed()
+            ->findOrFail($parcela);
+
+        if ($parcela->trashed()) {
+            $parcela->restore();
+        }
+
+        return $this->show($parcela->id);
     }
 
     public function patchPagamento(PatchParcelaPagamentoRequest $request, Parcela $parcela): ParcelaResource
@@ -74,6 +99,6 @@ class ParcelaController extends Controller
 
         $parcela->save();
 
-        return $this->show($parcela);
+        return $this->show($parcela->id);
     }
 }
