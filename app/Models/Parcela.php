@@ -33,6 +33,7 @@ class Parcela extends Model
             'valor_previsto' => 'decimal:2',
             'valor_pago' => 'decimal:2',
             'valor_empenhado' => 'decimal:2',
+            'dados_origem' => 'array',
         ];
     }
 

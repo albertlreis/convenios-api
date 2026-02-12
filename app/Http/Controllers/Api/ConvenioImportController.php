@@ -1,0 +1,62 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\ConfirmConvenioImportRequest;
+use App\Http\Requests\UploadConvenioImportRequest;
+use App\Http\Resources\ConvenioImportResource;
+use App\Models\ConvenioImport;
+use App\Services\ConvenioImportService;
+use Illuminate\Http\JsonResponse;
+
+class ConvenioImportController extends Controller
+{
+    public function __construct(private readonly ConvenioImportService $service)
+    {
+    }
+
+    public function upload(UploadConvenioImportRequest $request): JsonResponse
+    {
+        $import = $this->service->uploadAndParse($request->file('arquivo'));
+
+        return $this->asJson($this->loadPreview($import), 'Arquivo importado para staging.', 201);
+    }
+
+    public function confirm(ConfirmConvenioImportRequest $request): JsonResponse
+    {
+        $import = ConvenioImport::query()->findOrFail($request->integer('import_id'));
+        $batchSize = max(50, min((int) $request->input('batch_size', 500), 2000));
+
+        $import = $this->service->confirmImport($import, $batchSize);
+
+        return $this->asJson($this->loadPreview($import), 'Importacao confirmada com processamento tolerante.');
+    }
+
+    public function show(int $id): JsonResponse
+    {
+        $import = ConvenioImport::query()->findOrFail($id);
+
+        return $this->asJson($this->loadPreview($import), 'Status da importacao.');
+    }
+
+    private function loadPreview(ConvenioImport $import): ConvenioImport
+    {
+        return $import->load([
+            'listaRows' => fn ($query) => $query->orderBy('row_number')->limit(20),
+            'parcelasRows' => fn ($query) => $query->orderBy('row_number')->limit(20),
+            'piRows' => fn ($query) => $query->orderBy('row_number')->limit(20),
+            'pendingItems' => fn ($query) => $query->latest('id')->limit(50),
+        ]);
+    }
+
+    private function asJson(ConvenioImport $import, string $mensagem, int $status = 200): JsonResponse
+    {
+        return response()->json([
+            'sucesso' => true,
+            'mensagem' => $mensagem,
+            'data' => ConvenioImportResource::make($import)->resolve(),
+        ], $status);
+    }
+}
+

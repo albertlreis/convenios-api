@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ConvenioController;
 use App\Http\Controllers\Api\ConvenioIndicadoresController;
+use App\Http\Controllers\Api\ConvenioImportController;
 use App\Http\Controllers\Api\FinanceiroController;
 use App\Http\Controllers\Api\MandatoController;
 use App\Http\Controllers\Api\MunicipioController;
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
     Route::get('health', fn () => ['status' => 'ok']);
+
+    Route::post('imports/convenios/upload', [ConvenioImportController::class, 'upload']);
+    Route::post('imports/convenios/confirm', [ConvenioImportController::class, 'confirm']);
+    Route::get('imports/convenios/{id}', [ConvenioImportController::class, 'show']);
 
     Route::get('convenios/indicadores/quantidade-com-parcelas-em-aberto', [ConvenioIndicadoresController::class, 'quantidadeComParcelasEmAberto']);
     Route::get('convenios/indicadores/valores-em-aberto', [ConvenioIndicadoresController::class, 'valoresEmAberto']);

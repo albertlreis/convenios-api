@@ -12,14 +12,26 @@ class ConvenioResource extends JsonResource
         return [
             'id' => $this->id,
             'orgao_id' => $this->orgao_id,
+            'orgao_nome_informado' => $this->orgao_nome_informado,
             'numero_convenio' => $this->numero_convenio,
+            'ano_referencia' => $this->ano_referencia,
             'codigo' => $this->codigo,
             'municipio_beneficiario_id' => $this->municipio_beneficiario_id,
+            'municipio_beneficiario_nome_informado' => $this->municipio_beneficiario_nome_informado,
             'convenente_nome' => $this->convenente_nome,
             'convenente_municipio_id' => $this->convenente_municipio_id,
-            'plano_interno' => $this->plano_interno,
+            'convenente_municipio_nome_informado' => $this->convenente_municipio_nome_informado,
+            'plano_interno' => $this->when(
+                $this->relationLoaded('planosInternos'),
+                fn () => $this->planosInternos->pluck('plano_interno')->first()
+            ),
+            'planos_internos' => $this->when(
+                $this->relationLoaded('planosInternos'),
+                fn () => $this->planosInternos->pluck('plano_interno')->values()
+            ),
             'objeto' => $this->objeto,
             'grupo_despesa' => $this->grupo_despesa,
+            'quantidade_parcelas_informada' => $this->quantidade_parcelas_informada,
             'data_inicio' => $this->data_inicio?->format('Y-m-d'),
             'data_fim' => $this->data_fim?->format('Y-m-d'),
             'valor_orgao' => $this->valor_orgao,
@@ -28,6 +40,7 @@ class ConvenioResource extends JsonResource
             'valor_total_informado' => $this->valor_total_informado,
             'valor_total_calculado' => $this->valor_total_calculado,
             'metadata' => $this->metadata,
+            'dados_origem' => $this->dados_origem,
             'parcelas_agg' => [
                 'parcelas_total' => (int) ($this->parcelas_total ?? 0),
                 'parcelas_pagas' => (int) ($this->parcelas_pagas ?? 0),

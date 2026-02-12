@@ -13,7 +13,7 @@ class FinanceiroController extends Controller
 {
     public function showByConvenio(Convenio $convenio): JsonResponse
     {
-        $pi = trim((string) ($convenio->plano_interno ?? ''));
+        $pi = trim((string) ($convenio->planosInternos()->orderBy('id')->value('plano_interno') ?? ''));
 
         if ($pi === '') {
             return response()->json([

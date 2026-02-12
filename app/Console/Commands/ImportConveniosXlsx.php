@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Convenio;
+use App\Models\ConvenioPlanoInterno;
 use App\Models\Municipio;
 use App\Models\Orgao;
 use App\Models\Parcela;
@@ -76,7 +77,6 @@ class ImportConveniosXlsx extends Command
                         'municipio_beneficiario_id' => $municipioBeneficiario?->id,
                         'convenente_nome' => $this->firstValue($row, ['convenente_nome', 'convenente']),
                         'convenente_municipio_id' => $municipioConvenente?->id,
-                        'plano_interno' => $this->parsePlanoInterno($this->firstValue($row, ['plano_interno', 'pi'])),
                         'objeto' => $this->firstValue($row, ['objeto']),
                         'grupo_despesa' => $this->firstValue($row, ['grupo_despesa']),
                         'data_inicio' => $this->parseDate($this->firstValue($row, ['data_inicio', 'inicio', 'dt_inicio'])),
@@ -98,6 +98,19 @@ class ImportConveniosXlsx extends Command
                     );
 
                     $convenio->save();
+
+                    $planoInterno = $this->parsePlanoInterno($this->firstValue($row, ['plano_interno', 'pi']));
+                    if ($planoInterno !== null) {
+                        ConvenioPlanoInterno::query()->updateOrCreate(
+                            [
+                                'convenio_id' => $convenio->id,
+                                'plano_interno' => strtoupper($planoInterno),
+                            ],
+                            [
+                                'origem' => 'import_command',
+                            ]
+                        );
+                    }
 
                     $stats[$isNovoConvenio ? 'convenios_criados' : 'convenios_atualizados']++;
 

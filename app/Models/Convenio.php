@@ -29,6 +29,7 @@ class Convenio extends Model
             'valor_total_informado' => 'decimal:2',
             'valor_total_calculado' => 'decimal:2',
             'metadata' => 'array',
+            'dados_origem' => 'array',
         ];
     }
 
@@ -93,5 +94,10 @@ class Convenio extends Model
     public function parcelas(): HasMany
     {
         return $this->hasMany(Parcela::class, 'convenio_id');
+    }
+
+    public function planosInternos(): HasMany
+    {
+        return $this->hasMany(ConvenioPlanoInterno::class, 'convenio_id');
     }
 }

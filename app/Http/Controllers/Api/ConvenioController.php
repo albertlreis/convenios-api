@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateConvenioRequest;
 use App\Http\Resources\ConvenioResource;
 use App\Http\Resources\ParcelaResource;
 use App\Models\Convenio;
+use App\Models\ConvenioPlanoInterno;
 use App\Support\LatestMunicipioDemografia;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +25,7 @@ class ConvenioController extends Controller
                 'orgao',
                 'municipioBeneficiario.regiaoIntegracao',
                 'municipioConvenente',
+                'planosInternos',
             ])
             ->leftJoin('municipio as municipio_beneficiario', function ($join): void {
                 $join->on('municipio_beneficiario.id', '=', 'convenio.municipio_beneficiario_id');
@@ -41,6 +43,7 @@ class ConvenioController extends Controller
                 'prefeito_nome_sort' => DB::raw('mandato_vigente_sort.prefeito_nome'),
                 'partido_sigla_sort' => DB::raw('mandato_vigente_sort.partido_sigla'),
                 'mandato_consecutivo_sort' => DB::raw('mandato_vigente_sort.mandato_consecutivo'),
+                'plano_interno_sort' => DB::raw('(SELECT MIN(cp.plano_interno) FROM convenio_plano_interno cp WHERE cp.convenio_id = convenio.id)'),
             ]);
 
         if ($request->boolean('only_trashed')) {
@@ -72,12 +75,19 @@ class ConvenioController extends Controller
 
         if ($request->filled('plano_interno')) {
             $planoInterno = (string) $request->string('plano_interno');
+            $normalizedPlanoInterno = str_replace('*', '%', $planoInterno);
 
-            if ($request->boolean('plano_interno_like') || str_contains($planoInterno, '%') || str_contains($planoInterno, '*')) {
-                $query->where('convenio.plano_interno', 'like', str_replace('*', '%', $planoInterno));
-            } else {
-                $query->where('convenio.plano_interno', $planoInterno);
-            }
+            $query->whereExists(function ($subquery) use ($normalizedPlanoInterno, $request): void {
+                $subquery->selectRaw('1')
+                    ->from('convenio_plano_interno as cp')
+                    ->whereColumn('cp.convenio_id', 'convenio.id');
+
+                if ($request->boolean('plano_interno_like') || str_contains($normalizedPlanoInterno, '%')) {
+                    $subquery->where('cp.plano_interno', 'like', $normalizedPlanoInterno);
+                } else {
+                    $subquery->where('cp.plano_interno', $normalizedPlanoInterno);
+                }
+            });
         }
 
         if ($request->filled('numero_convenio')) {
@@ -144,7 +154,7 @@ class ConvenioController extends Controller
             'numero_convenio' => 'convenio.numero_convenio',
             'data_inicio' => 'convenio.data_inicio',
             'data_fim' => 'convenio.data_fim',
-            'plano_interno' => 'convenio.plano_interno',
+            'plano_interno' => 'plano_interno_sort',
             'municipio_nome' => 'municipio_nome',
             'orgao_sigla' => 'orgao_sigla',
             'prefeito_nome' => 'prefeito_nome_sort',
@@ -169,9 +179,14 @@ class ConvenioController extends Controller
 
     public function store(StoreConvenioRequest $request): JsonResponse
     {
-        $convenio = Convenio::query()->create($request->validated());
+        $validated = $request->validated();
+        $planosInternos = $this->extractPlanosInternos($validated);
+        unset($validated['plano_interno'], $validated['planos_internos']);
 
-        $convenio->load(['orgao', 'municipioBeneficiario.regiaoIntegracao', 'municipioConvenente']);
+        $convenio = Convenio::query()->create($validated);
+        $this->syncPlanosInternos($convenio, $planosInternos);
+
+        $convenio->load(['orgao', 'municipioBeneficiario.regiaoIntegracao', 'municipioConvenente', 'planosInternos']);
         $convenio->loadAggregate('parcelas', 'id', 'count');
 
         return ConvenioResource::make($convenio)->response()->setStatusCode(201);
@@ -187,6 +202,7 @@ class ConvenioController extends Controller
                 'municipioBeneficiario.regiaoIntegracao',
                 'municipioConvenente',
                 'parcelas',
+                'planosInternos',
             ])
             ->withParcelasAgg()
             ->firstOrFail();
@@ -196,8 +212,13 @@ class ConvenioController extends Controller
 
     public function update(UpdateConvenioRequest $request, Convenio $convenio): ConvenioResource
     {
-        $convenio->fill($request->validated());
+        $validated = $request->validated();
+        $planosInternos = $this->extractPlanosInternos($validated);
+        unset($validated['plano_interno'], $validated['planos_internos']);
+
+        $convenio->fill($validated);
         $convenio->save();
+        $this->syncPlanosInternos($convenio, $planosInternos);
 
         return $this->show($convenio->id);
     }
@@ -279,5 +300,64 @@ class ConvenioController extends Controller
             ->whereColumn('mandato_vigente.municipio_id', 'convenio.municipio_beneficiario_id')
             ->whereDate('mandato_vigente.mandato_inicio', '<=', now()->toDateString())
             ->whereDate('mandato_vigente.mandato_fim', '>=', now()->toDateString());
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<int, string>|null
+     */
+    private function extractPlanosInternos(array $validated): ?array
+    {
+        $planos = $validated['planos_internos'] ?? null;
+        $planoUnico = $validated['plano_interno'] ?? null;
+
+        if ($planos === null && $planoUnico === null) {
+            return null;
+        }
+
+        $rawPlanos = [];
+        if (is_array($planos)) {
+            $rawPlanos = $planos;
+        }
+        if (is_string($planoUnico) && trim($planoUnico) !== '') {
+            $rawPlanos[] = $planoUnico;
+        }
+
+        $normalized = collect($rawPlanos)
+            ->map(fn ($item) => strtoupper(trim((string) $item)))
+            ->filter(fn ($item) => $item !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        return $normalized;
+    }
+
+    /**
+     * @param  array<int, string>|null  $planosInternos
+     */
+    private function syncPlanosInternos(Convenio $convenio, ?array $planosInternos): void
+    {
+        if ($planosInternos === null) {
+            return;
+        }
+
+        $convenio->planosInternos()->delete();
+
+        if ($planosInternos === []) {
+            return;
+        }
+
+        $payload = collect($planosInternos)->map(
+            fn (string $planoInterno): array => [
+                'convenio_id' => $convenio->id,
+                'plano_interno' => $planoInterno,
+                'origem' => 'api_manual',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        )->all();
+
+        ConvenioPlanoInterno::query()->insert($payload);
     }
 }

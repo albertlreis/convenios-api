@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Convenio;
+use App\Models\ConvenioPlanoInterno;
 use App\Models\Municipio;
 use App\Models\Orgao;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -30,7 +31,6 @@ class ConvenioFactory extends Factory
             'municipio_beneficiario_id' => Municipio::factory(),
             'convenente_nome' => $this->faker->company(),
             'convenente_municipio_id' => Municipio::factory(),
-            'plano_interno' => strtoupper($this->faker->bothify('??#######??')),
             'objeto' => $this->faker->sentence(8),
             'grupo_despesa' => $this->faker->randomElement(['CUSTEIO', 'CAPITAL']),
             'data_inicio' => $this->faker->date(),
@@ -42,5 +42,16 @@ class ConvenioFactory extends Factory
             'valor_total_calculado' => $this->faker->randomFloat(2, 1000, 600000),
             'metadata' => ['factory' => true],
         ];
+    }
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (Convenio $convenio): void {
+            ConvenioPlanoInterno::query()->create([
+                'convenio_id' => $convenio->id,
+                'plano_interno' => strtoupper($this->faker->bothify('??#######??')),
+                'origem' => 'factory',
+            ]);
+        });
     }
 }
