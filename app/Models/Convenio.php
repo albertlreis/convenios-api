@@ -28,7 +28,6 @@ class Convenio extends Model
             'valor_aditivo' => 'decimal:2',
             'valor_total_informado' => 'decimal:2',
             'valor_total_calculado' => 'decimal:2',
-            'metadata' => 'array',
             'dados_origem' => 'array',
         ];
     }
@@ -81,14 +80,9 @@ class Convenio extends Model
         return $this->belongsTo(Orgao::class, 'orgao_id');
     }
 
-    public function municipioBeneficiario(): BelongsTo
+    public function municipio(): BelongsTo
     {
-        return $this->belongsTo(Municipio::class, 'municipio_beneficiario_id');
-    }
-
-    public function municipioConvenente(): BelongsTo
-    {
-        return $this->belongsTo(Municipio::class, 'convenente_municipio_id');
+        return $this->belongsTo(Municipio::class, 'municipio_id');
     }
 
     public function parcelas(): HasMany

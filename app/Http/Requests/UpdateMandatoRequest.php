@@ -14,7 +14,6 @@ class UpdateMandatoRequest extends ApiFormRequest
         $nrTurno = $this->input('nr_turno') ?? $this->route('mandato')?->nr_turno;
 
         return [
-            'legacy_id' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'municipio_id' => ['sometimes', 'required', Rule::exists('municipio', 'id')],
             'prefeito_id' => ['sometimes', 'required', Rule::exists('prefeito', 'id')],
             'partido_id' => ['sometimes', 'nullable', Rule::exists('partido', 'id')],

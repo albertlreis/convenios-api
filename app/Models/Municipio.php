@@ -23,17 +23,12 @@ class Municipio extends Model
 
     public function conveniosBeneficiarios(): HasMany
     {
-        return $this->hasMany(Convenio::class, 'municipio_beneficiario_id');
+        return $this->hasMany(Convenio::class, 'municipio_id');
     }
 
     public function convenios(): HasMany
     {
         return $this->conveniosBeneficiarios();
-    }
-
-    public function conveniosConvenente(): HasMany
-    {
-        return $this->hasMany(Convenio::class, 'convenente_municipio_id');
     }
 
     public function mandatos(): HasMany

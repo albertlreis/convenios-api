@@ -11,7 +11,6 @@ class PartidoResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'legacy_id' => $this->legacy_id,
             'sigla' => $this->sigla,
             'nome' => $this->nome,
             'numero' => $this->numero,

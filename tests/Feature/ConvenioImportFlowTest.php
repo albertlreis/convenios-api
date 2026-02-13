@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Convenio;
 use App\Models\ConvenioImportListaRow;
 use App\Models\Municipio;
 use App\Models\Orgao;
@@ -59,7 +60,7 @@ class ConvenioImportFlowTest extends TestCase
 
     public function test_confirm_nao_bloqueia_e_cria_pendencias(): void
     {
-        Orgao::query()->create([
+        $orgao = Orgao::query()->create([
             'sigla' => 'SETESTE',
             'nome' => 'Secretaria de Teste',
         ]);
@@ -134,15 +135,17 @@ class ConvenioImportFlowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.status', 'confirmed');
 
-        $this->assertDatabaseHas('convenio', ['numero_convenio' => 'CV-100/2026']);
+        $this->assertDatabaseHas('convenio', [
+            'numero_convenio' => 'CV-100/2026',
+            'orgao_id' => $orgao->id,
+        ]);
         $this->assertDatabaseHas('convenio', [
             'numero_convenio' => 'CV-200/2026',
-            'municipio_beneficiario_id' => null,
-            'municipio_beneficiario_nome_informado' => 'Municipio Fantasma',
+            'municipio_id' => null,
         ]);
         $this->assertDatabaseHas('convenio_import_pending_items', [
             'import_id' => $importId,
-            'reason' => 'municipio_beneficiario_nao_encontrado',
+            'reason' => 'municipio_nao_encontrado',
             'reference_key' => 'CV-200/2026',
         ]);
         $this->assertDatabaseHas('convenio_import_pending_items', [
@@ -155,7 +158,7 @@ class ConvenioImportFlowTest extends TestCase
         ]);
         $this->assertDatabaseHas('parcela', [
             'numero' => 1,
-            'convenio_numero_informado' => 'CV-100/2026',
+            'convenio_id' => Convenio::query()->where('numero_convenio', 'CV-100/2026')->value('id'),
         ]);
     }
 
@@ -287,12 +290,10 @@ class ConvenioImportFlowTest extends TestCase
             ->assertJsonPath('data.status', 'confirmed');
 
         $this->assertDatabaseHas('parcela', [
-            'convenio_numero_informado' => 'CV-400/2026',
             'numero' => 1,
             'situacao' => 'PAGA',
         ]);
         $this->assertDatabaseHas('parcela', [
-            'convenio_numero_informado' => 'CV-400/2026',
             'numero' => 2,
             'situacao' => 'PREVISTA',
         ]);

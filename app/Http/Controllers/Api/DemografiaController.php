@@ -193,7 +193,7 @@ class DemografiaController extends Controller
     {
         $validated = $request->validate([
             'q' => ['nullable', 'string', 'max:120'],
-            'limit' => ['nullable', 'integer', 'min:1', 'max:200'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:300'],
         ]);
 
         $limit = (int) ($validated['limit'] ?? 50);
