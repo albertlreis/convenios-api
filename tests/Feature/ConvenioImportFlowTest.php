@@ -231,6 +231,73 @@ class ConvenioImportFlowTest extends TestCase
         ]);
     }
 
+    public function test_confirm_classifica_parcelas_pagas_e_em_aberto_a_partir_do_status_textual(): void
+    {
+        Orgao::query()->create([
+            'sigla' => 'SETESTE',
+            'nome' => 'Secretaria de Teste',
+        ]);
+
+        Municipio::query()->create([
+            'regiao_id' => null,
+            'nome' => 'Municipio Bom',
+            'uf' => 'PA',
+            'codigo_ibge' => '1500001',
+            'codigo_tse' => 1001,
+        ]);
+
+        $file = $this->buildImportFile(
+            listaRows: [
+                [
+                    'orgao' => 'SETESTE',
+                    'municipio' => 'Municipio Bom',
+                    'convenente' => 'Municipio Bom',
+                    'numero_convenio' => 'CV-400/2026',
+                    'ano' => '2026',
+                ],
+            ],
+            parcelasRows: [
+                [
+                    'numero_convenio' => 'CV-400/2026',
+                    'numero_parcela' => '1',
+                    'valor_previsto' => '500,00',
+                    'situacao' => 'PAGO/OK',
+                    'data_pagamento' => '',
+                    'valor_pago' => '',
+                    'observacoes' => '',
+                ],
+                [
+                    'numero_convenio' => 'CV-400/2026',
+                    'numero_parcela' => '2',
+                    'valor_previsto' => '500,00',
+                    'situacao' => 'EM ABERTO',
+                    'data_pagamento' => '',
+                    'valor_pago' => '',
+                    'observacoes' => '',
+                ],
+            ],
+            piRows: []
+        );
+
+        $upload = $this->postJson('/api/v1/imports/convenios/upload', ['arquivo' => $file])->assertCreated();
+        $importId = $upload->json('data.id');
+
+        $this->postJson('/api/v1/imports/convenios/confirm', ['import_id' => $importId])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'confirmed');
+
+        $this->assertDatabaseHas('parcela', [
+            'convenio_numero_informado' => 'CV-400/2026',
+            'numero' => 1,
+            'situacao' => 'PAGA',
+        ]);
+        $this->assertDatabaseHas('parcela', [
+            'convenio_numero_informado' => 'CV-400/2026',
+            'numero' => 2,
+            'situacao' => 'PREVISTA',
+        ]);
+    }
+
     private function buildImportFile(array $listaRows, array $parcelasRows, array $piRows): UploadedFile
     {
         $spreadsheet = new Spreadsheet;

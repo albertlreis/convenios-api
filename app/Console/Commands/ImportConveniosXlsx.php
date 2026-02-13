@@ -7,6 +7,7 @@ use App\Models\ConvenioPlanoInterno;
 use App\Models\Municipio;
 use App\Models\Orgao;
 use App\Models\Parcela;
+use App\Support\NormalizeParcelaStatus;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -117,6 +118,10 @@ class ImportConveniosXlsx extends Command
                     $numeroParcela = $this->parseInteger($this->firstValue($row, ['parcela_numero', 'numero_parcela', 'parcela']));
 
                     if ($numeroParcela !== null) {
+                        $statusBruto = $this->firstValue($row, ['parcela_situacao', 'situacao']);
+                        $statusNormalizado = NormalizeParcelaStatus::normalize($statusBruto);
+                        $statusClassificacao = NormalizeParcelaStatus::classify($statusBruto);
+
                         $parcela = Parcela::query()->firstOrNew([
                             'convenio_id' => $convenio->id,
                             'numero' => $numeroParcela,
@@ -131,8 +136,17 @@ class ImportConveniosXlsx extends Command
                             'nota_empenho' => $this->firstValue($row, ['nota_empenho', 'numero_ne', 'ne']),
                             'data_ne' => $this->parseDate($this->firstValue($row, ['data_ne', 'data_nota_empenho'])),
                             'valor_empenhado' => $this->parseDecimal($this->firstValue($row, ['valor_empenhado'])),
-                            'situacao' => $this->parseSituacaoParcela($this->firstValue($row, ['parcela_situacao', 'situacao'])),
+                            'situacao' => $this->parseSituacaoParcela($statusBruto),
                             'observacoes' => $this->firstValue($row, ['parcela_observacoes', 'observacoes']),
+                            'dados_origem' => [
+                                'source_file' => $relativePath,
+                                'sheet' => $sheetName,
+                                'row' => $rowNumber + 1,
+                                'raw_data' => $row,
+                                'status_bruto' => $statusBruto,
+                                'status_normalizado' => $statusNormalizado,
+                                'status_classificacao' => $statusClassificacao,
+                            ],
                         ]);
 
                         $parcela->save();
@@ -361,12 +375,6 @@ class ImportConveniosXlsx extends Command
 
     private function parseSituacaoParcela(?string $value): string
     {
-        $value = strtoupper((string) $value);
-
-        return match ($value) {
-            'PAGA' => 'PAGA',
-            'CANCELADA' => 'CANCELADA',
-            default => 'PREVISTA',
-        };
+        return NormalizeParcelaStatus::toParcelaSituacao($value);
     }
 }

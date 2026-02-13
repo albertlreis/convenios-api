@@ -44,6 +44,40 @@ Inclui:
 ./vendor/bin/sail artisan import:convenios-xlsx
 ```
 
+### Normalização de status das parcelas (importação)
+
+Na importação, o campo textual de status da parcela é normalizado para:
+- `PAGA` (salva em `parcela.situacao = PAGA`)
+- `EM_ABERTO` (salva em `parcela.situacao = PREVISTA`)
+- `DESCONHECIDO` (fallback seguro: `PREVISTA`, com warning/log e contagem no resumo da importação)
+
+Valores reconhecidos como `PAGA` incluem variações como:
+- `PAGO`, `PAGA`, `PAGAMENTO EFETUADO`, `QUITADO`, `LIQUIDADO`, `BAIXADO`
+- com variações de caixa, acentos, pontuação e sufixos/prefixos (`pago.`, `PAGO/OK`, `PAGA (FINALIZADO)`, etc.)
+
+Valores reconhecidos como `EM_ABERTO` incluem:
+- `ABERTO`, `EM ABERTO`, `PENDENTE`, `A PAGAR`, `NÃO PAGO`/`NAO PAGO`
+
+Para ampliar o mapeamento, ajuste as regex em:
+- `app/Support/NormalizeParcelaStatus.php`
+
+### Reprocessamento seguro de status já importados
+
+Para corrigir parcelas já importadas com status textual interpretado incorretamente:
+
+```bash
+# Preview (dry-run): não persiste alterações
+./vendor/bin/sail artisan parcelas:reprocessar-status --import-id=123
+
+# Aplicar correções no banco
+./vendor/bin/sail artisan parcelas:reprocessar-status --import-id=123 --apply
+```
+
+Opções úteis:
+- `--import-id=*` filtra por importações específicas
+- `--from=YYYY-MM-DD --to=YYYY-MM-DD` filtra por período de criação da parcela
+- `--chunk=500` ajusta tamanho de lote
+
 ## SQL Server externo (financeiro)
 
 Configurar no `.env`:

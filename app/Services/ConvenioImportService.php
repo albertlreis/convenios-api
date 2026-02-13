@@ -12,6 +12,7 @@ use App\Models\ConvenioPlanoInterno;
 use App\Models\Municipio;
 use App\Models\Orgao;
 use App\Models\Parcela;
+use App\Support\NormalizeParcelaStatus;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -172,6 +173,13 @@ class ConvenioImportService
         $counters = [
             'processados' => 0,
             'pendencias' => 0,
+            'parcelas_status' => [
+                'total' => 0,
+                'paga' => 0,
+                'em_aberto' => 0,
+                'desconhecido' => 0,
+                'desconhecidos_top' => [],
+            ],
         ];
 
         $convenioIdByNumero = [];
@@ -321,7 +329,49 @@ class ConvenioImportService
 
                     $valorPrevisto = $this->normalizeDecimal($data['valor_previsto'] ?? null);
                     $valorPago = $this->normalizeDecimal($data['valor_pago'] ?? null);
-                    $situacao = $this->normalizeSituacao($data['situacao'] ?? null, $valorPrevisto, $valorPago);
+                    $rawStatus = $this->extractRawParcelaStatus($row->raw_data ?? [], $data);
+                    $statusClassificacao = NormalizeParcelaStatus::classify($rawStatus);
+                    $statusNormalizado = NormalizeParcelaStatus::normalize($rawStatus);
+                    $situacao = NormalizeParcelaStatus::toParcelaSituacao($rawStatus);
+
+                    $this->incrementParcelaStatusCounters($counters['parcelas_status'], $statusClassificacao, $rawStatus);
+
+                    Log::debug('Importacao de parcela: status normalizado.', [
+                        'import_id' => $import->id,
+                        'row_number' => $row->row_number,
+                        'numero_convenio' => $numeroConvenio,
+                        'numero_parcela' => $numeroParcela,
+                        'status_bruto' => $rawStatus,
+                        'status_normalizado' => $statusNormalizado,
+                        'status_classificacao' => $statusClassificacao,
+                        'situacao_final' => $situacao,
+                    ]);
+
+                    if ($statusClassificacao === NormalizeParcelaStatus::DESCONHECIDO) {
+                        Log::warning('Importacao de parcela com status desconhecido; fallback para em aberto.', [
+                            'import_id' => $import->id,
+                            'row_number' => $row->row_number,
+                            'numero_convenio' => $numeroConvenio,
+                            'numero_parcela' => $numeroParcela,
+                            'status_bruto' => $rawStatus,
+                            'status_normalizado' => $statusNormalizado,
+                        ]);
+
+                        $this->registerPending(
+                            $import,
+                            'parcelas',
+                            $row->id,
+                            $row->row_number,
+                            $numeroConvenio,
+                            'status_parcela_desconhecido',
+                            [
+                                'status_bruto' => $rawStatus,
+                                'status_normalizado' => $statusNormalizado,
+                                'situacao_fallback' => $situacao,
+                            ]
+                        );
+                        $counters['pendencias']++;
+                    }
 
                     $payload = [
                         'convenio_id' => $convenioId,
@@ -337,6 +387,9 @@ class ConvenioImportService
                             'sheet' => 'parcelas',
                             'row_number' => $row->row_number,
                             'raw_data' => $row->raw_data,
+                            'status_bruto' => $rawStatus,
+                            'status_normalizado' => $statusNormalizado,
+                            'status_classificacao' => $statusClassificacao,
                         ],
                     ];
 
@@ -375,6 +428,13 @@ class ConvenioImportService
                 'confirmacao' => [
                     'processados' => $counters['processados'],
                     'pendencias' => $import->pendingItems()->count(),
+                ],
+                'parcelas_status' => [
+                    'total' => $counters['parcelas_status']['total'],
+                    'paga' => $counters['parcelas_status']['paga'],
+                    'em_aberto' => $counters['parcelas_status']['em_aberto'],
+                    'desconhecido' => $counters['parcelas_status']['desconhecido'],
+                    'top_20_status_desconhecidos' => $this->topStatusDesconhecidos($counters['parcelas_status']['desconhecidos_top']),
                 ],
             ]),
         ]);
@@ -709,18 +769,63 @@ class ConvenioImportService
         ]);
     }
 
-    private function normalizeSituacao(mixed $situacao, ?float $valorPrevisto, ?float $valorPago): string
+    /**
+     * @param  array<string, mixed>  $rawData
+     * @param  array<string, mixed>  $normalizedData
+     */
+    private function extractRawParcelaStatus(array $rawData, array $normalizedData): ?string
     {
-        $normalized = strtoupper(trim((string) $situacao));
-        if (in_array($normalized, ['PREVISTA', 'PAGA', 'CANCELADA'], true)) {
-            return $normalized;
+        foreach ($rawData as $key => $value) {
+            if ($this->normalizeHeaderKey($key) === 'situacao') {
+                return $this->normalizeString($value);
+            }
         }
 
-        if ($valorPago !== null && $valorPrevisto !== null && $valorPago >= $valorPrevisto) {
-            return 'PAGA';
+        return $this->normalizeString($normalizedData['situacao'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $counters
+     */
+    private function incrementParcelaStatusCounters(array &$counters, string $classificacao, ?string $rawStatus): void
+    {
+        $counters['total']++;
+
+        if ($classificacao === NormalizeParcelaStatus::PAGA) {
+            $counters['paga']++;
+
+            return;
         }
 
-        return 'PREVISTA';
+        if ($classificacao === NormalizeParcelaStatus::EM_ABERTO) {
+            $counters['em_aberto']++;
+
+            return;
+        }
+
+        $counters['desconhecido']++;
+        $key = $rawStatus !== null && trim($rawStatus) !== '' ? trim($rawStatus) : '(vazio)';
+        $counters['desconhecidos_top'][$key] = ($counters['desconhecidos_top'][$key] ?? 0) + 1;
+    }
+
+    /**
+     * @param  array<string, int>  $unknownCounters
+     * @return array<int, array{status_bruto: string, ocorrencias: int}>
+     */
+    private function topStatusDesconhecidos(array $unknownCounters): array
+    {
+        arsort($unknownCounters);
+        $top = array_slice($unknownCounters, 0, 20, true);
+
+        $result = [];
+        foreach ($top as $status => $count) {
+            $result[] = [
+                'status_bruto' => $status,
+                'ocorrencias' => $count,
+            ];
+        }
+
+        return $result;
     }
 
     /**
