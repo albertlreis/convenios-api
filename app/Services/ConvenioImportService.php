@@ -208,16 +208,24 @@ class ConvenioImportService
                     }
 
                     $orgaoNome = $this->normalizeString($data['orgao'] ?? null);
-                    $orgaoLegacyId = $this->normalizeInteger($data['orgao_legacy_id'] ?? null);
                     $municipioNome = $this->normalizeString($data['municipio'] ?? null);
                     $municipioIbge = $this->normalizeString($data['municipio_ibge'] ?? null);
                     $convenente = $this->normalizeString($data['convenente'] ?? null);
 
-                    $orgao = $this->resolveOrgao($orgaoLegacyId, $orgaoNome);
+                    $orgao = $this->resolveOrgao($orgaoNome);
                     $municipio = $this->resolveMunicipio($municipioNome, $municipioIbge);
 
+                    if ($orgao === null) {
+                        $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', [
+                            'orgao' => $orgaoNome,
+                        ]);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        $counters['pendencias']++;
+                        continue;
+                    }
+
                     $payload = [
-                        'orgao_id' => $orgao?->id,
+                        'orgao_id' => $orgao->id,
                         'numero_convenio' => $numeroConvenio,
                         'ano_referencia' => $this->normalizeInteger($data['ano'] ?? null),
                         'municipio_id' => $municipio?->id,
@@ -240,7 +248,7 @@ class ConvenioImportService
 
                     $convenio = Convenio::query()
                         ->withTrashed()
-                        ->where('orgao_id', $orgao?->id)
+                        ->where('orgao_id', $orgao->id)
                         ->where('numero_convenio', $numeroConvenio)
                         ->first();
 
@@ -253,15 +261,8 @@ class ConvenioImportService
                         $convenio = Convenio::query()->create($payload);
                     }
 
-                    $convenioIdByOrgaoAndNumero[$this->convenioCacheKey($orgao?->id, $numeroConvenio)] = $convenio->id;
+                    $convenioIdByOrgaoAndNumero[$this->convenioCacheKey($orgao->id, $numeroConvenio)] = $convenio->id;
 
-                    if ($orgaoNome !== null && $orgao === null) {
-                        $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', [
-                            'orgao' => $orgaoNome,
-                            'orgao_legacy_id' => $orgaoLegacyId,
-                        ]);
-                        $counters['pendencias']++;
-                    }
                     if (($municipioNome !== null || $municipioIbge !== null) && $municipio === null) {
                         $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'municipio_nao_encontrado', [
                             'municipio' => $municipioNome,
@@ -288,8 +289,7 @@ class ConvenioImportService
                     $numeroConvenio = $this->normalizeString($data['numero_convenio'] ?? null);
                     $planoInterno = $this->normalizeString($data['plano_interno'] ?? null);
                     $orgaoNome = $this->normalizeString($data['orgao'] ?? null);
-                    $orgaoLegacyId = $this->normalizeInteger($data['orgao_legacy_id'] ?? null);
-                    $orgao = $this->resolveOrgao($orgaoLegacyId, $orgaoNome);
+                    $orgao = $this->resolveOrgao($orgaoNome);
 
                     if ($numeroConvenio === null || $planoInterno === null) {
                         $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'pi_invalido', $row->raw_data ?? []);
@@ -334,8 +334,7 @@ class ConvenioImportService
                     $numeroConvenio = $this->normalizeString($data['numero_convenio'] ?? null);
                     $numeroParcela = $this->normalizeInteger($data['numero_parcela'] ?? null);
                     $orgaoNome = $this->normalizeString($data['orgao'] ?? null);
-                    $orgaoLegacyId = $this->normalizeInteger($data['orgao_legacy_id'] ?? null);
-                    $orgao = $this->resolveOrgao($orgaoLegacyId, $orgaoNome);
+                    $orgao = $this->resolveOrgao($orgaoNome);
 
                     if ($numeroConvenio === null || $numeroParcela === null) {
                         $this->registerPending($import, 'parcelas', $row->id, $row->row_number, $numeroConvenio, 'parcela_sem_chave', $row->raw_data ?? []);
@@ -449,9 +448,9 @@ class ConvenioImportService
                 }
             }, 'id');
 
-        $totalIssues = $import->listaRows()->whereNotNull('issues')->count()
-            + $import->parcelasRows()->whereNotNull('issues')->count()
-            + $import->piRows()->whereNotNull('issues')->count()
+        $totalIssues = $import->listaRows()->whereJsonLength('issues', '>', 0)->count()
+            + $import->parcelasRows()->whereJsonLength('issues', '>', 0)->count()
+            + $import->piRows()->whereJsonLength('issues', '>', 0)->count()
             + $import->pendingItems()->count();
 
         $import->update([
@@ -558,12 +557,14 @@ class ConvenioImportService
                 $issues[] = 'plano_interno_ausente';
             }
 
+            $issuesValue = $issues === [] ? null : $issues;
+
             $parsedRows[] = [
                 'row_number' => $rowNumber,
                 'raw_data' => $rawData,
                 'normalized_data' => $normalizedData,
-                'status' => $issues === [] ? 'parsed' : 'parsed_with_issues',
-                'issues' => $issues,
+                'status' => $issuesValue === null ? 'parsed' : 'parsed_with_issues',
+                'issues' => $issuesValue,
             ];
         }
 
@@ -711,10 +712,22 @@ class ConvenioImportService
             }
         }
 
-        $formats = ['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y'];
+        $rawDate = trim((string) $value);
+        $twoDigitYear = preg_match('/^\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2}$/', $rawDate) === 1;
+        $formats = $twoDigitYear
+            ? ['d/m/y', 'd-m-y', 'd.m.y', 'Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y']
+            : ['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y', 'd/m/y', 'd-m-y', 'd.m.y'];
         foreach ($formats as $format) {
             try {
-                return Carbon::createFromFormat($format, trim((string) $value))->format('Y-m-d');
+                $date = Carbon::createFromFormat($format, $rawDate);
+                if (str_contains($format, 'y') && ! str_contains($format, 'Y')) {
+                    $year = (int) $date->format('Y');
+                    if ($year < 100) {
+                        $date->setYear($year + 2000);
+                    }
+                }
+
+                return $date->format('Y-m-d');
             } catch (\Throwable) {
             }
         }
@@ -730,35 +743,18 @@ class ConvenioImportService
         }
     }
 
-    private function resolveOrgao(?int $legacyId, ?string $valor): ?Orgao
+    private function resolveOrgao(?string $valor): ?Orgao
     {
-        if ($legacyId !== null) {
-            $porCodigo = Orgao::query()->where('codigo_sigplan', $legacyId)->first();
-            if ($porCodigo !== null) {
-                return $porCodigo;
-            }
-        }
-
         if ($valor === null) {
             return null;
         }
 
         $sigla = strtoupper(trim($valor));
-        $bySigla = Orgao::query()->whereRaw('UPPER(sigla) = ?', [$sigla])->first();
-        if ($bySigla !== null) {
-            return $bySigla;
-        }
-
-        $normalized = TextNormalizer::normalizeForMatch($valor);
-        if ($normalized === null) {
+        if ($sigla === '') {
             return null;
         }
 
-        return Orgao::query()
-            ->get(['id', 'sigla', 'nome'])
-            ->first(function (Orgao $orgao) use ($normalized): bool {
-                return TextNormalizer::normalizeForMatch($orgao->nome) === $normalized;
-            });
+        return Orgao::query()->whereRaw('UPPER(sigla) = ?', [$sigla])->first();
     }
 
     private function resolveMunicipio(?string $nome, ?string $codigoIbge): ?Municipio
