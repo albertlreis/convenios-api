@@ -12,7 +12,7 @@ use App\Http\Controllers\Api\MunicipioDemografiaController;
 use App\Http\Controllers\Api\MunicipioIndicadoresController;
 use App\Http\Controllers\Api\OrgaoController;
 use App\Http\Controllers\Api\ParcelaController;
-use App\Http\Controllers\Api\PartidoController;ghffgdhfdgh
+use App\Http\Controllers\Api\PartidoController;
 use App\Http\Controllers\Api\PrefeitoController;
 use Illuminate\Support\Facades\Route;
 

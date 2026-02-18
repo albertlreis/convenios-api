@@ -35,7 +35,7 @@ return new class extends Migration
             $table->softDeletes();
             $table->boolean('is_active')->virtualAs('IF(deleted_at IS NULL, 1, NULL)');
 
-            $table->unique(['codigo', 'is_active'], 'convenio_codigo_unique_active');
+            $table->unique(['codigo', 'is_active', 'orgao_id'], 'convenio_codigo_unique_active');
             $table->index('orgao_id');
             $table->index('municipio_beneficiario_id');
             $table->index('plano_interno');
