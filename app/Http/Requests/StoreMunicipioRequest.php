@@ -11,7 +11,6 @@ class StoreMunicipioRequest extends ApiFormRequest
         $uf = $this->input('uf', 'PA');
 
         return [
-            'legacy_id' => ['nullable', 'integer', 'min:0'],
             'regiao_id' => ['nullable', Rule::exists('regiao_integracao', 'id')],
             'nome' => [
                 'required',

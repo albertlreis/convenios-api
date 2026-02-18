@@ -15,7 +15,6 @@ class MunicipioFactory extends Factory
     public function definition(): array
     {
         return [
-            'legacy_id' => null,
             'regiao_id' => null,
             'nome' => $this->faker->unique()->city(),
             'uf' => 'PA',

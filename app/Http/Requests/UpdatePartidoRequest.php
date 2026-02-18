@@ -19,7 +19,6 @@ class UpdatePartidoRequest extends ApiFormRequest
                 Rule::unique('partido', 'sigla')
                     ->ignore($partidoId),
             ],
-            'legacy_id' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'nome' => ['sometimes', 'nullable', 'string', 'max:120'],
             'numero' => [
                 'sometimes',

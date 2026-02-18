@@ -57,27 +57,23 @@ class ImportConveniosXlsx extends Command
 
                     $row = $this->rowToAssoc($headers, $rowValues);
 
-                    $codigo = $this->firstValue($row, ['codigo', 'convenio_codigo']);
                     $numeroConvenio = $this->firstValue($row, ['numero_convenio', 'n_convenio', 'convenio_numero']);
 
-                    if ($codigo === null && $numeroConvenio === null) {
+                    if ($numeroConvenio === null) {
                         continue;
                     }
 
                     $orgao = $this->resolveOrgao($row);
-                    $municipioBeneficiario = $this->resolveMunicipioBeneficiario($row);
-                    $municipioConvenente = $this->resolveMunicipioConvenente($row);
+                    $municipio = $this->resolveMunicipioBeneficiario($row);
 
-                    $convenio = $this->resolveConvenio($codigo, $numeroConvenio, $orgao?->id);
+                    $convenio = $this->resolveConvenio($numeroConvenio, $orgao?->id);
                     $isNovoConvenio = ! $convenio->exists;
 
                     $convenio->fill([
                         'orgao_id' => $orgao?->id,
                         'numero_convenio' => $numeroConvenio,
-                        'codigo' => $codigo,
-                        'municipio_beneficiario_id' => $municipioBeneficiario?->id,
+                        'municipio_id' => $municipio?->id,
                         'convenente_nome' => $this->firstValue($row, ['convenente_nome', 'convenente']),
-                        'convenente_municipio_id' => $municipioConvenente?->id,
                         'objeto' => $this->firstValue($row, ['objeto']),
                         'grupo_despesa' => $this->firstValue($row, ['grupo_despesa']),
                         'data_inicio' => $this->parseDate($this->firstValue($row, ['data_inicio', 'inicio', 'dt_inicio'])),
@@ -89,15 +85,6 @@ class ImportConveniosXlsx extends Command
                         'valor_total_calculado' => $this->parseDecimal($this->firstValue($row, ['valor_total_calculado'])),
                     ]);
 
-                    $convenio->metadata = array_merge(
-                        is_array($convenio->metadata) ? $convenio->metadata : [],
-                        [
-                            'source_file' => $relativePath,
-                            'sheet' => $sheetName,
-                            'row' => $rowNumber + 1,
-                        ]
-                    );
-
                     $convenio->save();
 
                     $planoInterno = $this->parsePlanoInterno($this->firstValue($row, ['plano_interno', 'pi']));
@@ -107,9 +94,7 @@ class ImportConveniosXlsx extends Command
                                 'convenio_id' => $convenio->id,
                                 'plano_interno' => strtoupper($planoInterno),
                             ],
-                            [
-                                'origem' => 'import_command',
-                            ]
+                            []
                         );
                     }
 
@@ -170,16 +155,28 @@ class ImportConveniosXlsx extends Command
 
     private function resolveOrgao(array $row): ?Orgao
     {
-        $sigla = $this->firstValue($row, ['orgao_sigla', 'sigla_orgao', 'sigla']);
-
-        if ($sigla === null) {
-            return null;
+        $codigoSigplan = $this->parseInteger($this->firstValue($row, ['orgao_legacy_id', 'orgao_id', 'orgao_codigo_sigplan']));
+        if ($codigoSigplan !== null) {
+            $orgao = Orgao::query()->where('codigo_sigplan', $codigoSigplan)->first();
+            if ($orgao !== null) {
+                return $orgao;
+            }
         }
 
-        return Orgao::query()->firstOrCreate(
-            ['sigla' => mb_strtoupper($sigla)],
-            ['nome' => $this->firstValue($row, ['orgao_nome', 'nome_orgao']) ?? mb_strtoupper($sigla)]
-        );
+        $sigla = $this->firstValue($row, ['orgao_sigla', 'sigla_orgao', 'sigla']);
+        if ($sigla !== null) {
+            $orgao = Orgao::query()->whereRaw('UPPER(sigla) = ?', [mb_strtoupper($sigla)])->first();
+            if ($orgao !== null) {
+                return $orgao;
+            }
+        }
+
+        $nome = $this->firstValue($row, ['orgao_nome', 'nome_orgao', 'orgao']);
+        if ($nome !== null) {
+            return Orgao::query()->whereRaw('LOWER(nome) = ?', [mb_strtolower($nome)])->first();
+        }
+
+        return null;
     }
 
     private function resolveMunicipioBeneficiario(array $row): ?Municipio
@@ -226,15 +223,8 @@ class ImportConveniosXlsx extends Command
             ->first();
     }
 
-    private function resolveConvenio(?string $codigo, ?string $numeroConvenio, ?int $orgaoId): Convenio
+    private function resolveConvenio(?string $numeroConvenio, ?int $orgaoId): Convenio
     {
-        if ($codigo !== null) {
-            $convenio = Convenio::query()->where('codigo', $codigo)->first();
-            if ($convenio) {
-                return $convenio;
-            }
-        }
-
         if ($numeroConvenio !== null) {
             $query = Convenio::query()->where('numero_convenio', $numeroConvenio);
 

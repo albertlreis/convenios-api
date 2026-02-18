@@ -11,7 +11,6 @@ class MunicipioResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'legacy_id' => $this->legacy_id,
             'regiao_id' => $this->regiao_id,
             'nome' => $this->nome,
             'uf' => $this->uf,

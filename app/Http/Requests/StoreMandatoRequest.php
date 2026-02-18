@@ -9,7 +9,6 @@ class StoreMandatoRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'legacy_id' => ['nullable', 'integer', 'min:0'],
             'municipio_id' => ['required', Rule::exists('municipio', 'id')],
             'prefeito_id' => ['required', Rule::exists('prefeito', 'id')],
             'partido_id' => ['nullable', Rule::exists('partido', 'id')],

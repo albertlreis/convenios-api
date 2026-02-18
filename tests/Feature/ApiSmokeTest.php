@@ -95,14 +95,13 @@ class ApiSmokeTest extends TestCase
 
         $convenio = Convenio::factory()->create([
             'orgao_id' => $orgao->id,
-            'municipio_beneficiario_id' => $municipio->id,
-            'codigo' => 'SM:001/2026',
+            'municipio_id' => $municipio->id,
+            'numero_convenio' => 'CV-001/2026',
         ]);
 
         ConvenioPlanoInterno::query()->create([
             'convenio_id' => $convenio->id,
             'plano_interno' => 'AB12CD34EF5',
-            'origem' => 'test',
         ]);
 
         Parcela::factory()->create([

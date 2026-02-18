@@ -11,7 +11,6 @@ class MandatoResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'legacy_id' => $this->legacy_id,
             'municipio_id' => $this->municipio_id,
             'prefeito_id' => $this->prefeito_id,
             'partido_id' => $this->partido_id,

@@ -19,8 +19,7 @@ class ConvenioCrudTest extends TestCase
         $payload = [
             'orgao_id' => $orgao->id,
             'numero_convenio' => 'CV-123/2026',
-            'codigo' => 'SE:123/2026',
-            'municipio_beneficiario_id' => $municipio->id,
+            'municipio_id' => $municipio->id,
             'plano_interno' => 'AB12CD34EF5',
             'objeto' => 'Pavimentacao urbana',
             'grupo_despesa' => 'CUSTEIO',
@@ -35,18 +34,21 @@ class ConvenioCrudTest extends TestCase
 
         $createResponse = $this->postJson('/api/v1/convenios', $payload)
             ->assertCreated()
-            ->assertJsonPath('data.codigo', 'SE:123/2026');
+            ->assertJsonPath('data.numero_convenio', 'CV-123/2026')
+            ->assertJsonMissingPath('data.codigo')
+            ->assertJsonMissingPath('data.metadata')
+            ->assertJsonMissingPath('data.municipio_beneficiario_id');
 
         $convenioId = $createResponse->json('data.id');
 
         $this->assertDatabaseHas('convenio', [
             'id' => $convenioId,
-            'codigo' => 'SE:123/2026',
+            'numero_convenio' => 'CV-123/2026',
         ]);
 
         $this->getJson("/api/v1/convenios/{$convenioId}")
             ->assertOk()
-            ->assertJsonPath('data.id', $convenioId);
+            ->assertJsonPath('data.convenio.id', $convenioId);
 
         $this->patchJson("/api/v1/convenios/{$convenioId}", [
             'grupo_despesa' => 'CAPITAL',

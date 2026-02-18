@@ -32,7 +32,9 @@ class ConvenioImportService
         return [
             'lista' => [
                 'orgao' => ['orgao'],
+                'orgao_legacy_id' => ['orgao_legacy_id', 'orgao_id'],
                 'municipio' => ['municipio'],
+                'municipio_ibge' => ['municipio_ibge', 'codigo_ibge'],
                 'convenente' => ['convenente'],
                 'numero_convenio' => ['numero_convenio'],
                 'ano' => ['ano'],
@@ -200,26 +202,22 @@ class ConvenioImportService
                     }
 
                     $orgaoNome = $this->normalizeString($data['orgao'] ?? null);
+                    $orgaoLegacyId = $this->normalizeInteger($data['orgao_legacy_id'] ?? null);
                     $municipioNome = $this->normalizeString($data['municipio'] ?? null);
+                    $municipioIbge = $this->normalizeString($data['municipio_ibge'] ?? null);
                     $convenente = $this->normalizeString($data['convenente'] ?? null);
 
-                    $orgao = $this->resolveOrgao($orgaoNome);
-                    $municipioBeneficiario = $this->resolveMunicipio($municipioNome);
-                    $convenenteMunicipio = $this->resolveMunicipio($convenente);
+                    $orgao = $this->resolveOrgao($orgaoLegacyId, $orgaoNome);
+                    $municipio = $this->resolveMunicipio($municipioNome, $municipioIbge);
 
                     $payload = [
                         'orgao_id' => $orgao?->id,
-                        'orgao_nome_informado' => $orgao ? null : $orgaoNome,
                         'numero_convenio' => $numeroConvenio,
                         'ano_referencia' => $this->normalizeInteger($data['ano'] ?? null),
-                        'municipio_beneficiario_id' => $municipioBeneficiario?->id,
-                        'municipio_beneficiario_nome_informado' => $municipioBeneficiario ? null : $municipioNome,
+                        'municipio_id' => $municipio?->id,
                         'convenente_nome' => $convenente,
-                        'convenente_municipio_id' => $convenenteMunicipio?->id,
-                        'convenente_municipio_nome_informado' => $convenenteMunicipio ? null : $convenente,
                         'objeto' => $this->normalizeString($data['objeto'] ?? null),
                         'grupo_despesa' => $this->normalizeString($data['grupo_despesa'] ?? null),
-                        'quantidade_parcelas_informada' => $this->normalizeInteger($data['quantidade_parcelas'] ?? null),
                         'data_inicio' => $this->normalizeDate($data['data_inicio'] ?? null),
                         'data_fim' => $this->normalizeDate($data['data_fim'] ?? null),
                         'valor_total_informado' => $this->normalizeDecimal($data['valor_total'] ?? null),
@@ -251,15 +249,17 @@ class ConvenioImportService
                     $convenioIdByNumero[$numeroConvenio] = $convenio->id;
 
                     if ($orgaoNome !== null && $orgao === null) {
-                        $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', ['orgao' => $orgaoNome]);
+                        $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', [
+                            'orgao' => $orgaoNome,
+                            'orgao_legacy_id' => $orgaoLegacyId,
+                        ]);
                         $counters['pendencias']++;
                     }
-                    if ($municipioNome !== null && $municipioBeneficiario === null) {
-                        $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'municipio_beneficiario_nao_encontrado', ['municipio' => $municipioNome]);
-                        $counters['pendencias']++;
-                    }
-                    if ($convenente !== null && $convenenteMunicipio === null) {
-                        $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'convenente_municipio_nao_encontrado', ['convenente' => $convenente]);
+                    if (($municipioNome !== null || $municipioIbge !== null) && $municipio === null) {
+                        $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'municipio_nao_encontrado', [
+                            'municipio' => $municipioNome,
+                            'municipio_ibge' => $municipioIbge,
+                        ]);
                         $counters['pendencias']++;
                     }
 
@@ -296,7 +296,7 @@ class ConvenioImportService
                         continue;
                     }
 
-                    $this->upsertPlanoInterno($convenioId, $planoInterno, 'plano_interno');
+                    $this->upsertPlanoInterno($convenioId, $planoInterno);
 
                     $row->update(['status' => 'processed', 'processed_at' => now()]);
                     $counters['processados']++;
@@ -375,7 +375,6 @@ class ConvenioImportService
 
                     $payload = [
                         'convenio_id' => $convenioId,
-                        'convenio_numero_informado' => $numeroConvenio,
                         'numero' => $numeroParcela,
                         'valor_previsto' => $valorPrevisto,
                         'situacao' => $situacao,
@@ -710,40 +709,95 @@ class ConvenioImportService
         }
     }
 
-    private function resolveOrgao(?string $valor): ?Orgao
+    private function resolveOrgao(?int $legacyId, ?string $valor): ?Orgao
     {
+        if ($legacyId !== null) {
+            $porCodigo = Orgao::query()->where('codigo_sigplan', $legacyId)->first();
+            if ($porCodigo !== null) {
+                return $porCodigo;
+            }
+        }
+
         if ($valor === null) {
+            return null;
+        }
+
+        $sigla = strtoupper(trim($valor));
+        $bySigla = Orgao::query()->whereRaw('UPPER(sigla) = ?', [$sigla])->first();
+        if ($bySigla !== null) {
+            return $bySigla;
+        }
+
+        $normalized = $this->normalizeTextForMatch($valor);
+        if ($normalized === '') {
             return null;
         }
 
         return Orgao::query()
-            ->where('sigla', $valor)
-            ->orWhere('nome', $valor)
-            ->first();
+            ->get(['id', 'sigla', 'nome'])
+            ->first(function (Orgao $orgao) use ($normalized): bool {
+                return $this->normalizeTextForMatch($orgao->nome) === $normalized;
+            });
     }
 
-    private function resolveMunicipio(?string $valor): ?Municipio
+    private function resolveMunicipio(?string $nome, ?string $codigoIbge): ?Municipio
     {
-        if ($valor === null) {
+        if ($codigoIbge !== null) {
+            $codigo = preg_replace('/\D/', '', $codigoIbge);
+            if ($codigo !== '') {
+                $porIbge = Municipio::query()->where('codigo_ibge', $codigo)->first();
+                if ($porIbge !== null) {
+                    return $porIbge;
+                }
+            }
+        }
+
+        if ($nome === null) {
+            return null;
+        }
+
+        $byNomeExato = Municipio::query()->whereRaw('LOWER(nome) = ?', [mb_strtolower($nome)])->first();
+        if ($byNomeExato !== null) {
+            return $byNomeExato;
+        }
+
+        $normalized = $this->normalizeTextForMatch($nome);
+        if ($normalized === '') {
             return null;
         }
 
         return Municipio::query()
-            ->where('nome', $valor)
-            ->first();
+            ->get(['id', 'nome'])
+            ->first(function (Municipio $municipio) use ($normalized): bool {
+                return $this->normalizeTextForMatch($municipio->nome) === $normalized;
+            });
     }
 
-    private function upsertPlanoInterno(int $convenioId, string $planoInterno, string $origem): void
+    private function upsertPlanoInterno(int $convenioId, string $planoInterno): void
     {
         ConvenioPlanoInterno::query()->updateOrCreate(
             [
                 'convenio_id' => $convenioId,
                 'plano_interno' => strtoupper(trim($planoInterno)),
             ],
-            [
-                'origem' => $origem,
-            ]
+            []
         );
+    }
+
+    private function normalizeTextForMatch(?string $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        $normalized = Str::of($value)
+            ->ascii()
+            ->lower()
+            ->replaceMatches('/[^a-z0-9]+/', ' ')
+            ->trim()
+            ->toString();
+
+        return preg_replace('/\s+/', ' ', $normalized) ?? '';
     }
 
     /**

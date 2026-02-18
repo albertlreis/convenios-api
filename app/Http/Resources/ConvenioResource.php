@@ -12,15 +12,10 @@ class ConvenioResource extends JsonResource
         return [
             'id' => $this->id,
             'orgao_id' => $this->orgao_id,
-            'orgao_nome_informado' => $this->orgao_nome_informado,
             'numero_convenio' => $this->numero_convenio,
             'ano_referencia' => $this->ano_referencia,
-            'codigo' => $this->codigo,
-            'municipio_beneficiario_id' => $this->municipio_beneficiario_id,
-            'municipio_beneficiario_nome_informado' => $this->municipio_beneficiario_nome_informado,
+            'municipio_id' => $this->municipio_id,
             'convenente_nome' => $this->convenente_nome,
-            'convenente_municipio_id' => $this->convenente_municipio_id,
-            'convenente_municipio_nome_informado' => $this->convenente_municipio_nome_informado,
             'plano_interno' => $this->when(
                 $this->relationLoaded('planosInternos'),
                 fn () => $this->planosInternos->pluck('plano_interno')->first()
@@ -29,9 +24,15 @@ class ConvenioResource extends JsonResource
                 $this->relationLoaded('planosInternos'),
                 fn () => $this->planosInternos->pluck('plano_interno')->values()
             ),
+            'planos_internos_detalhes' => $this->when(
+                $this->relationLoaded('planosInternos'),
+                fn () => $this->planosInternos->map(fn ($pi) => [
+                    'id' => $pi->id,
+                    'codigo' => $pi->plano_interno,
+                ])->values()
+            ),
             'objeto' => $this->objeto,
             'grupo_despesa' => $this->grupo_despesa,
-            'quantidade_parcelas_informada' => $this->quantidade_parcelas_informada,
             'data_inicio' => $this->data_inicio?->format('Y-m-d'),
             'data_fim' => $this->data_fim?->format('Y-m-d'),
             'valor_orgao' => $this->valor_orgao,
@@ -39,7 +40,6 @@ class ConvenioResource extends JsonResource
             'valor_aditivo' => $this->valor_aditivo,
             'valor_total_informado' => $this->valor_total_informado,
             'valor_total_calculado' => $this->valor_total_calculado,
-            'metadata' => $this->metadata,
             'dados_origem' => $this->dados_origem,
             'parcelas_agg' => [
                 'parcelas_total' => (int) ($this->parcelas_total ?? 0),
@@ -48,13 +48,16 @@ class ConvenioResource extends JsonResource
                 'valor_previsto_total' => $this->decimal($this->valor_previsto_total ?? 0),
                 'valor_pago_total' => $this->decimal($this->valor_pago_total ?? 0),
                 'valor_em_aberto_total' => $this->decimal($this->valor_em_aberto_total ?? 0),
+                'percentual_execucao' => $this->calcExecucaoPercentual(
+                    (float) ($this->valor_previsto_total ?? 0),
+                    (float) ($this->valor_pago_total ?? 0)
+                ),
             ],
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
             'deleted_at' => $this->deleted_at?->format('Y-m-d H:i:s'),
             'orgao' => OrgaoResource::make($this->whenLoaded('orgao')),
-            'municipio_beneficiario' => MunicipioResource::make($this->whenLoaded('municipioBeneficiario')),
-            'municipio_convenente' => MunicipioResource::make($this->whenLoaded('municipioConvenente')),
+            'municipio' => MunicipioResource::make($this->whenLoaded('municipio')),
             'parcelas' => ParcelaResource::collection($this->whenLoaded('parcelas')),
         ];
     }
@@ -62,5 +65,16 @@ class ConvenioResource extends JsonResource
     private function decimal(mixed $value): string
     {
         return number_format((float) $value, 2, '.', '');
+    }
+
+    private function calcExecucaoPercentual(float $valorTotalParcelas, float $valorPago): string
+    {
+        if ($valorTotalParcelas <= 0) {
+            return '0.00';
+        }
+
+        $percentual = max(0, min(100, ($valorPago / $valorTotalParcelas) * 100));
+
+        return number_format($percentual, 2, '.', '');
     }
 }

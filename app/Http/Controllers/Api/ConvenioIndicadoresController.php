@@ -59,7 +59,7 @@ class ConvenioIndicadoresController extends Controller
             ->whereExists(function (Builder $subquery): void {
                 $subquery->selectRaw('1')
                     ->from('convenio')
-                    ->whereColumn('convenio.municipio_beneficiario_id', 'municipio.id')
+                    ->whereColumn('convenio.municipio_id', 'municipio.id')
                     ->whereNull('convenio.deleted_at');
             });
 

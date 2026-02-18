@@ -14,14 +14,14 @@ class SoftDeleteRestoreEndpointsTest extends TestCase
 
     public function test_convenios_support_only_trashed_and_restore(): void
     {
-        $convenio = Convenio::factory()->create(['codigo' => 'SE:999/2026']);
+        $convenio = Convenio::factory()->create(['numero_convenio' => 'CV-999/2026']);
         $convenio->delete();
 
         $this->assertSoftDeleted('convenio', ['id' => $convenio->id]);
 
         $this->getJson('/api/v1/convenios?only_trashed=1')
             ->assertOk()
-            ->assertJsonPath('data.0.id', $convenio->id);
+            ->assertJsonPath('data.results.0.id', $convenio->id);
 
         $this->postJson("/api/v1/convenios/{$convenio->id}/restore")
             ->assertOk()

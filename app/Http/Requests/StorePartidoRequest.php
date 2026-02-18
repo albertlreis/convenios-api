@@ -15,7 +15,6 @@ class StorePartidoRequest extends ApiFormRequest
                 'max:10',
                 Rule::unique('partido', 'sigla'),
             ],
-            'legacy_id' => ['nullable', 'integer', 'min:0'],
             'nome' => ['nullable', 'string', 'max:120'],
             'numero' => [
                 'nullable',

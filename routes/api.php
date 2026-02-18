@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\ConvenioController;
 use App\Http\Controllers\Api\ConvenioIndicadoresController;
 use App\Http\Controllers\Api\ConvenioImportController;
+use App\Http\Controllers\Api\DemografiaController;
+use App\Http\Controllers\Api\EleitoralController;
 use App\Http\Controllers\Api\FinanceiroController;
 use App\Http\Controllers\Api\MandatoController;
 use App\Http\Controllers\Api\MunicipioController;
@@ -10,7 +12,7 @@ use App\Http\Controllers\Api\MunicipioDemografiaController;
 use App\Http\Controllers\Api\MunicipioIndicadoresController;
 use App\Http\Controllers\Api\OrgaoController;
 use App\Http\Controllers\Api\ParcelaController;
-use App\Http\Controllers\Api\PartidoController;
+use App\Http\Controllers\Api\PartidoController;ghffgdhfdgh
 use App\Http\Controllers\Api\PrefeitoController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +28,7 @@ Route::prefix('v1')->group(function (): void {
     Route::get('convenios/indicadores/valores-em-aberto', [ConvenioIndicadoresController::class, 'valoresEmAberto']);
     Route::get('convenios/indicadores/populacao-atendida', [ConvenioIndicadoresController::class, 'populacaoAtendida']);
     Route::get('convenios/indicadores/eleitores-atendidos', [ConvenioIndicadoresController::class, 'eleitoresAtendidos']);
+    Route::get('convenios/filtros', [ConvenioController::class, 'filtros']);
     Route::get('convenios/{convenio}/parcelas', [ConvenioController::class, 'parcelas']);
     Route::get('convenios/{convenio}/parcelas-em-aberto', [ConvenioController::class, 'parcelasEmAberto']);
     Route::get('convenios/{convenio}/financeiro', [FinanceiroController::class, 'showByConvenio']);
@@ -62,6 +65,14 @@ Route::prefix('v1')->group(function (): void {
     Route::apiResource('partidos', PartidoController::class)->parameters([
         'partidos' => 'partido',
     ]);
+
+    Route::get('demografia', [DemografiaController::class, 'index']);
+    Route::get('demografia/lookups', [DemografiaController::class, 'lookups']);
+    Route::get('demografia/municipios/{municipioId}', [DemografiaController::class, 'showMunicipio']);
+
+    Route::get('eleitoral', [EleitoralController::class, 'index']);
+    Route::get('eleitoral/lookups', [EleitoralController::class, 'lookups']);
+    Route::get('eleitoral/municipios/{municipioId}', [EleitoralController::class, 'showMunicipio']);
 
     Route::get('financeiro/pi/{pi}', [FinanceiroController::class, 'showByPi']);
 });

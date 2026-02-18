@@ -134,8 +134,7 @@ curl -X POST http://localhost:8080/api/convenios \
   -d '{
     "orgao_id": 1,
     "numero_convenio": "CV-001/2026",
-    "codigo": "SE:001/2026",
-    "municipio_beneficiario_id": 1,
+    "municipio_id": 1,
     "plano_interno": "AB12CD34EF5",
     "data_inicio": "2026-01-01",
     "data_fim": "2026-12-31",
@@ -185,8 +184,9 @@ curl "http://localhost:8080/api/convenios/1/financeiro"
 
 ## Observações
 
-- `numero_convenio` não é único.
-- `codigo` segue regex `^[A-Z0-9]{2,20}:\d{3}\/\d{4}$` e permite reuso após soft delete.
+- `numero_convenio` é o identificador oficial de convênio.
+- Município oficial do convênio: `municipio_id` (FK para `municipio.id`).
+- Órgão oficial do convênio: `orgao_id` (FK para `orgao.id`).
 - PI (`plano_interno`) é tratado como string alfanumérica de 11 caracteres.
 - Soft delete aplicado nas entidades solicitadas.
 
