@@ -33,14 +33,14 @@ class EleitoralUnifiedEndpointsTest extends TestCase
         $partidoA = DB::table('partido')->insertGetId([
             'sigla' => 'PAA',
             'nome' => 'Partido A',
-            'numero' => 11,
+            'numero' => 911,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
         $partidoB = DB::table('partido')->insertGetId([
             'sigla' => 'PBB',
             'nome' => 'Partido B',
-            'numero' => 22,
+            'numero' => 922,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -98,7 +98,7 @@ class EleitoralUnifiedEndpointsTest extends TestCase
         $partido = DB::table('partido')->insertGetId([
             'sigla' => 'PCC',
             'nome' => 'Partido C',
-            'numero' => 33,
+            'numero' => 933,
             'created_at' => now(),
             'updated_at' => now(),
         ]);

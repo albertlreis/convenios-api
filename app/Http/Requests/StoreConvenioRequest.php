@@ -8,8 +8,11 @@ class StoreConvenioRequest extends ApiFormRequest
 {
     public function rules(): array
     {
+        $orgaoId = $this->input('orgao_id');
         $uniqueNumeroConvenio = Rule::unique('convenio', 'numero_convenio')
-            ->where(fn ($query) => $query->whereNull('deleted_at'));
+            ->where(fn ($query) => $query
+                ->whereNull('deleted_at')
+                ->where('orgao_id', $orgaoId));
 
         return [
             'orgao_id' => ['nullable', Rule::exists('orgao', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],

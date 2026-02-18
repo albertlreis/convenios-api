@@ -13,6 +13,8 @@ use App\Models\Municipio;
 use App\Models\Orgao;
 use App\Models\Parcela;
 use App\Support\NormalizeParcelaStatus;
+use App\Support\PtBrNumberParser;
+use App\Support\TextNormalizer;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -49,6 +51,8 @@ class ConvenioImportService
             ],
             'parcelas' => [
                 'numero_convenio' => ['numero_convenio'],
+                'orgao' => ['orgao', 'orgao_sigla', 'orgao_nome'],
+                'orgao_legacy_id' => ['orgao_legacy_id', 'orgao_id'],
                 'numero_parcela' => ['numero_parcela'],
                 'valor_previsto' => ['valor_previsto'],
                 'situacao' => ['situacao'],
@@ -58,6 +62,8 @@ class ConvenioImportService
             ],
             'plano_interno' => [
                 'numero_convenio' => ['numero_convenio'],
+                'orgao' => ['orgao', 'orgao_sigla', 'orgao_nome'],
+                'orgao_legacy_id' => ['orgao_legacy_id', 'orgao_id'],
                 'plano_interno' => ['plano_interno'],
             ],
         ];
@@ -184,12 +190,12 @@ class ConvenioImportService
             ],
         ];
 
-        $convenioIdByNumero = [];
+        $convenioIdByOrgaoAndNumero = [];
 
         ConvenioImportListaRow::query()
             ->where('import_id', $import->id)
             ->orderBy('id')
-            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByNumero): void {
+            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByOrgaoAndNumero): void {
                 foreach ($rows as $row) {
                     $data = $row->normalized_data ?? [];
                     $numeroConvenio = $this->normalizeString($data['numero_convenio'] ?? null);
@@ -234,6 +240,7 @@ class ConvenioImportService
 
                     $convenio = Convenio::query()
                         ->withTrashed()
+                        ->where('orgao_id', $orgao?->id)
                         ->where('numero_convenio', $numeroConvenio)
                         ->first();
 
@@ -246,7 +253,7 @@ class ConvenioImportService
                         $convenio = Convenio::query()->create($payload);
                     }
 
-                    $convenioIdByNumero[$numeroConvenio] = $convenio->id;
+                    $convenioIdByOrgaoAndNumero[$this->convenioCacheKey($orgao?->id, $numeroConvenio)] = $convenio->id;
 
                     if ($orgaoNome !== null && $orgao === null) {
                         $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', [
@@ -275,11 +282,14 @@ class ConvenioImportService
         ConvenioImportPiRow::query()
             ->where('import_id', $import->id)
             ->orderBy('id')
-            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByNumero): void {
+            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByOrgaoAndNumero): void {
                 foreach ($rows as $row) {
                     $data = $row->normalized_data ?? [];
                     $numeroConvenio = $this->normalizeString($data['numero_convenio'] ?? null);
                     $planoInterno = $this->normalizeString($data['plano_interno'] ?? null);
+                    $orgaoNome = $this->normalizeString($data['orgao'] ?? null);
+                    $orgaoLegacyId = $this->normalizeInteger($data['orgao_legacy_id'] ?? null);
+                    $orgao = $this->resolveOrgao($orgaoLegacyId, $orgaoNome);
 
                     if ($numeroConvenio === null || $planoInterno === null) {
                         $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'pi_invalido', $row->raw_data ?? []);
@@ -288,7 +298,19 @@ class ConvenioImportService
                         continue;
                     }
 
-                    $convenioId = $convenioIdByNumero[$numeroConvenio] ?? Convenio::query()->where('numero_convenio', $numeroConvenio)->value('id');
+                    if ($orgao === null) {
+                        $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', $row->raw_data ?? []);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        $counters['pendencias']++;
+                        continue;
+                    }
+
+                    $convenioCacheKey = $this->convenioCacheKey($orgao->id, $numeroConvenio);
+                    $convenioId = $convenioIdByOrgaoAndNumero[$convenioCacheKey]
+                        ?? Convenio::query()
+                            ->where('orgao_id', $orgao->id)
+                            ->where('numero_convenio', $numeroConvenio)
+                            ->value('id');
                     if (! $convenioId) {
                         $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'convenio_nao_encontrado', $row->raw_data ?? []);
                         $row->update(['status' => 'pending', 'processed_at' => now()]);
@@ -306,11 +328,14 @@ class ConvenioImportService
         ConvenioImportParcelaRow::query()
             ->where('import_id', $import->id)
             ->orderBy('id')
-            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByNumero): void {
+            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByOrgaoAndNumero): void {
                 foreach ($rows as $row) {
                     $data = $row->normalized_data ?? [];
                     $numeroConvenio = $this->normalizeString($data['numero_convenio'] ?? null);
                     $numeroParcela = $this->normalizeInteger($data['numero_parcela'] ?? null);
+                    $orgaoNome = $this->normalizeString($data['orgao'] ?? null);
+                    $orgaoLegacyId = $this->normalizeInteger($data['orgao_legacy_id'] ?? null);
+                    $orgao = $this->resolveOrgao($orgaoLegacyId, $orgaoNome);
 
                     if ($numeroConvenio === null || $numeroParcela === null) {
                         $this->registerPending($import, 'parcelas', $row->id, $row->row_number, $numeroConvenio, 'parcela_sem_chave', $row->raw_data ?? []);
@@ -319,7 +344,19 @@ class ConvenioImportService
                         continue;
                     }
 
-                    $convenioId = $convenioIdByNumero[$numeroConvenio] ?? Convenio::query()->where('numero_convenio', $numeroConvenio)->value('id');
+                    if ($orgao === null) {
+                        $this->registerPending($import, 'parcelas', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', $row->raw_data ?? []);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        $counters['pendencias']++;
+                        continue;
+                    }
+
+                    $convenioCacheKey = $this->convenioCacheKey($orgao->id, $numeroConvenio);
+                    $convenioId = $convenioIdByOrgaoAndNumero[$convenioCacheKey]
+                        ?? Convenio::query()
+                            ->where('orgao_id', $orgao->id)
+                            ->where('numero_convenio', $numeroConvenio)
+                            ->value('id');
                     if (! $convenioId) {
                         $this->registerPending($import, 'parcelas', $row->id, $row->row_number, $numeroConvenio, 'convenio_nao_encontrado', $row->raw_data ?? []);
                         $row->update(['status' => 'pending', 'processed_at' => now()]);
@@ -648,25 +685,9 @@ class ConvenioImportService
         return (int) $stringValue;
     }
 
-    private function normalizeDecimal(mixed $value): ?float
+    private function normalizeDecimal(mixed $value): ?string
     {
-        if ($value === null || trim((string) $value) === '') {
-            return null;
-        }
-
-        $raw = trim((string) $value);
-        $raw = preg_replace('/[^\d,.-]/', '', $raw) ?? '';
-
-        if (str_contains($raw, ',') && str_contains($raw, '.')) {
-            $stringValue = str_replace('.', '', $raw);
-            $stringValue = str_replace(',', '.', $stringValue);
-        } elseif (str_contains($raw, ',')) {
-            $stringValue = str_replace(',', '.', $raw);
-        } else {
-            $stringValue = $raw;
-        }
-
-        return is_numeric($stringValue) ? (float) $stringValue : null;
+        return PtBrNumberParser::parseDecimal($value);
     }
 
     /**
@@ -728,15 +749,15 @@ class ConvenioImportService
             return $bySigla;
         }
 
-        $normalized = $this->normalizeTextForMatch($valor);
-        if ($normalized === '') {
+        $normalized = TextNormalizer::normalizeForMatch($valor);
+        if ($normalized === null) {
             return null;
         }
 
         return Orgao::query()
             ->get(['id', 'sigla', 'nome'])
             ->first(function (Orgao $orgao) use ($normalized): bool {
-                return $this->normalizeTextForMatch($orgao->nome) === $normalized;
+                return TextNormalizer::normalizeForMatch($orgao->nome) === $normalized;
             });
     }
 
@@ -761,16 +782,23 @@ class ConvenioImportService
             return $byNomeExato;
         }
 
-        $normalized = $this->normalizeTextForMatch($nome);
-        if ($normalized === '') {
+        $normalized = TextNormalizer::normalizeForMatch($nome);
+        if ($normalized === null) {
             return null;
         }
 
-        return Municipio::query()
+        $matches = Municipio::query()
             ->get(['id', 'nome'])
-            ->first(function (Municipio $municipio) use ($normalized): bool {
-                return $this->normalizeTextForMatch($municipio->nome) === $normalized;
-            });
+            ->filter(function (Municipio $municipio) use ($normalized): bool {
+                return TextNormalizer::normalizeForMatch($municipio->nome) === $normalized;
+            })
+            ->values();
+
+        if ($matches->count() !== 1) {
+            return null;
+        }
+
+        return $matches->first();
     }
 
     private function upsertPlanoInterno(int $convenioId, string $planoInterno): void
@@ -784,20 +812,9 @@ class ConvenioImportService
         );
     }
 
-    private function normalizeTextForMatch(?string $value): string
+    private function convenioCacheKey(?int $orgaoId, string $numeroConvenio): string
     {
-        if ($value === null) {
-            return '';
-        }
-
-        $normalized = Str::of($value)
-            ->ascii()
-            ->lower()
-            ->replaceMatches('/[^a-z0-9]+/', ' ')
-            ->trim()
-            ->toString();
-
-        return preg_replace('/\s+/', ' ', $normalized) ?? '';
+        return ($orgaoId ?? 'null').'|'.$numeroConvenio;
     }
 
     /**
