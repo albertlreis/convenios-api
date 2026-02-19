@@ -38,6 +38,9 @@ class ConvenioController extends Controller
             'valor_total_max' => ['nullable', 'numeric', 'min:0'],
             'valor_em_aberto_min' => ['nullable', 'numeric', 'min:0'],
             'valor_em_aberto_max' => ['nullable', 'numeric', 'min:0'],
+            'partido_id' => ['nullable', 'integer'],
+            'prefeito_primeiro_mandato' => ['nullable', 'boolean'],
+            'prefeito_segundo_mandato' => ['nullable', 'boolean'],
             'orderBy' => ['nullable', 'string'],
             'direction' => ['nullable', 'string', 'in:asc,desc'],
             'sort' => ['nullable', 'string'],
@@ -120,6 +123,7 @@ class ConvenioController extends Controller
         }
 
         $this->applyPlanoInternoFilters($query, $validated);
+        $this->applyMandatoFilters($query, $validated);
 
         if (($validated['valor_total_min'] ?? null) !== null) {
             $query->whereRaw('COALESCE(convenio.valor_total_calculado, convenio.valor_total_informado, 0) >= ?', [(float) $validated['valor_total_min']]);
@@ -452,6 +456,48 @@ class ConvenioController extends Controller
     /**
      * @param  array<string, mixed>  $validated
      */
+    private function applyMandatoFilters($query, array $validated): void
+    {
+        $hoje = now()->toDateString();
+
+        if (! empty($validated['partido_id'])) {
+            $partidoId = (int) $validated['partido_id'];
+            $query->whereExists(function ($subquery) use ($hoje, $partidoId): void {
+                $subquery->selectRaw('1')
+                    ->from('mandato_prefeito as mandato_filter')
+                    ->whereColumn('mandato_filter.municipio_id', 'convenio.municipio_id')
+                    ->where('mandato_filter.partido_id', $partidoId)
+                    ->whereDate('mandato_filter.mandato_inicio', '<=', $hoje)
+                    ->whereDate('mandato_filter.mandato_fim', '>=', $hoje);
+            });
+        }
+
+        if (($validated['prefeito_primeiro_mandato'] ?? null) !== null) {
+            $query->whereExists(function ($subquery) use ($hoje, $validated): void {
+                $subquery->selectRaw('1')
+                    ->from('mandato_prefeito as mandato_filter')
+                    ->whereColumn('mandato_filter.municipio_id', 'convenio.municipio_id')
+                    ->whereDate('mandato_filter.mandato_inicio', '<=', $hoje)
+                    ->whereDate('mandato_filter.mandato_fim', '>=', $hoje)
+                    ->where('mandato_filter.mandato_consecutivo', $validated['prefeito_primeiro_mandato'] ? 1 : 2);
+            });
+        }
+
+        if (($validated['prefeito_segundo_mandato'] ?? null) !== null) {
+            $query->whereExists(function ($subquery) use ($hoje, $validated): void {
+                $subquery->selectRaw('1')
+                    ->from('mandato_prefeito as mandato_filter')
+                    ->whereColumn('mandato_filter.municipio_id', 'convenio.municipio_id')
+                    ->whereDate('mandato_filter.mandato_inicio', '<=', $hoje)
+                    ->whereDate('mandato_filter.mandato_fim', '>=', $hoje)
+                    ->where('mandato_filter.mandato_consecutivo', $validated['prefeito_segundo_mandato'] ? 2 : 1);
+            });
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
     private function applyPlanoInternoFilters($query, array $validated): void
     {
         $piCodes = collect($validated['pi'] ?? [])
@@ -493,6 +539,7 @@ class ConvenioController extends Controller
             'data_fim' => 'convenio.data_fim',
             'valor_total' => 'COALESCE(convenio.valor_total_calculado, convenio.valor_total_informado, 0)',
             'valor_em_aberto' => 'valor_em_aberto_total',
+            'valor_em_aberto_total' => 'valor_em_aberto_total',
             'parcelas_em_aberto' => 'parcelas_em_aberto',
         ];
         $rawSortFields = ['valor_total'];

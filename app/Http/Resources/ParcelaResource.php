@@ -20,7 +20,7 @@ class ParcelaResource extends JsonResource
             'data_ne' => $this->data_ne?->format('Y-m-d'),
             'valor_empenhado' => $this->valor_empenhado,
             'situacao' => $this->situacao,
-            'situacao_financeira' => $this->situacao === 'PAGA' ? 'PAGA' : 'EM_ABERTO',
+            'situacao_financeira' => $this->situacao,
             'observacoes' => $this->observacoes,
             'dados_origem' => $this->dados_origem,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),

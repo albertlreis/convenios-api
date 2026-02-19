@@ -9,10 +9,13 @@ class UpdateConvenioRequest extends ApiFormRequest
     public function rules(): array
     {
         $convenioId = $this->route('convenio')?->id ?? $this->route('convenio');
+        $orgaoId = $this->input('orgao_id') ?? $this->route('convenio')?->orgao_id;
 
         $uniqueNumeroConvenio = Rule::unique('convenio', 'numero_convenio')
             ->ignore($convenioId)
-            ->where(fn ($query) => $query->whereNull('deleted_at'));
+            ->where(fn ($query) => $query
+                ->whereNull('deleted_at')
+                ->where('orgao_id', $orgaoId));
 
         return [
             'orgao_id' => ['nullable', Rule::exists('orgao', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],

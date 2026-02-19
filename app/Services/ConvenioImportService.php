@@ -13,6 +13,8 @@ use App\Models\Municipio;
 use App\Models\Orgao;
 use App\Models\Parcela;
 use App\Support\NormalizeParcelaStatus;
+use App\Support\PtBrNumberParser;
+use App\Support\TextNormalizer;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -32,7 +34,6 @@ class ConvenioImportService
         return [
             'lista' => [
                 'orgao' => ['orgao'],
-                'orgao_legacy_id' => ['orgao_legacy_id', 'orgao_id'],
                 'municipio' => ['municipio'],
                 'municipio_ibge' => ['municipio_ibge', 'codigo_ibge'],
                 'convenente' => ['convenente'],
@@ -45,8 +46,9 @@ class ConvenioImportService
                 'valor_total' => ['valor_total'],
                 'valor_orgao' => ['valor_orgao'],
                 'valor_contrapartida' => ['valor_contrapartida'],
-                'quantidade_parcelas' => ['quantidade_parcelas'],
             ],
+
+            // ✅ IMPORTANTE: parcelas NÃO tem coluna orgao; ela existe apenas na aba lista.
             'parcelas' => [
                 'numero_convenio' => ['numero_convenio'],
                 'numero_parcela' => ['numero_parcela'],
@@ -56,7 +58,10 @@ class ConvenioImportService
                 'valor_pago' => ['valor_pago'],
                 'observacoes' => ['observacoes'],
             ],
+
+            // ✅ PI também não depende de orgao; vínculo é numero_convenio.
             'plano_interno' => [
+                'orgao' => ['orgao'],
                 'numero_convenio' => ['numero_convenio'],
                 'plano_interno' => ['plano_interno'],
             ],
@@ -138,7 +143,9 @@ class ConvenioImportService
             ]);
         }
 
-        $totalIssues = $this->countIssueRows($parsedLista['rows']) + $this->countIssueRows($parsedParcelas['rows']) + $this->countIssueRows($parsedPi['rows']);
+        $totalIssues = $this->countIssueRows($parsedLista['rows'])
+            + $this->countIssueRows($parsedParcelas['rows'])
+            + $this->countIssueRows($parsedPi['rows']);
 
         $import->update([
             'status' => 'parsed',
@@ -184,12 +191,15 @@ class ConvenioImportService
             ],
         ];
 
-        $convenioIdByNumero = [];
+        // ✅ Cache principal: a “chave de ligação” entre abas é numero_convenio
+        $convenioIdByNumero = [];      // [numero_convenio => convenio_id]
+        $orgaoIdByNumero = [];         // [numero_convenio => orgao_id] (para detectar conflito)
+        $numeroConvenioAmbiguo = [];   // [numero_convenio => true] quando houver conflito
 
         ConvenioImportListaRow::query()
             ->where('import_id', $import->id)
             ->orderBy('id')
-            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByNumero): void {
+            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByNumero, &$orgaoIdByNumero, &$numeroConvenioAmbiguo): void {
                 foreach ($rows as $row) {
                     $data = $row->normalized_data ?? [];
                     $numeroConvenio = $this->normalizeString($data['numero_convenio'] ?? null);
@@ -202,16 +212,51 @@ class ConvenioImportService
                     }
 
                     $orgaoNome = $this->normalizeString($data['orgao'] ?? null);
-                    $orgaoLegacyId = $this->normalizeInteger($data['orgao_legacy_id'] ?? null);
                     $municipioNome = $this->normalizeString($data['municipio'] ?? null);
                     $municipioIbge = $this->normalizeString($data['municipio_ibge'] ?? null);
                     $convenente = $this->normalizeString($data['convenente'] ?? null);
 
-                    $orgao = $this->resolveOrgao($orgaoLegacyId, $orgaoNome);
+                    $orgao = $this->resolveOrgao($orgaoNome);
                     $municipio = $this->resolveMunicipio($municipioNome, $municipioIbge);
 
+                    if ($orgao === null) {
+                        $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', [
+                            'orgao' => $orgaoNome,
+                        ]);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        $counters['pendencias']++;
+                        continue;
+                    }
+
+                    // ✅ Detecta conflito: mesmo numero_convenio com orgao diferente na aba lista
+                    $existingOrgaoId = $orgaoIdByNumero[$numeroConvenio] ?? null;
+                    if ($existingOrgaoId !== null && $existingOrgaoId !== $orgao->id) {
+                        $numeroConvenioAmbiguo[$numeroConvenio] = true;
+                        unset($convenioIdByNumero[$numeroConvenio]);
+
+                        $this->registerPending(
+                            $import,
+                            'lista',
+                            $row->id,
+                            $row->row_number,
+                            $numeroConvenio,
+                            'numero_convenio_ambiguo_em_lista',
+                            [
+                                'orgao_existente_id' => $existingOrgaoId,
+                                'orgao_novo_id' => $orgao->id,
+                                'orgao_novo' => $orgaoNome,
+                                'message' => 'Mesmo numero_convenio apareceu com orgao diferente na aba lista; abas parcelas/PI ficam ambiguas.',
+                            ]
+                        );
+
+                        // ainda assim processa/atualiza o convênio por (orgao_id + numero_convenio)
+                        // mas marca a ambiguidade para impedir vínculo automático nas outras abas.
+                    } else {
+                        $orgaoIdByNumero[$numeroConvenio] = $orgao->id;
+                    }
+
                     $payload = [
-                        'orgao_id' => $orgao?->id,
+                        'orgao_id' => $orgao->id,
                         'numero_convenio' => $numeroConvenio,
                         'ano_referencia' => $this->normalizeInteger($data['ano'] ?? null),
                         'municipio_id' => $municipio?->id,
@@ -234,6 +279,7 @@ class ConvenioImportService
 
                     $convenio = Convenio::query()
                         ->withTrashed()
+                        ->where('orgao_id', $orgao->id)
                         ->where('numero_convenio', $numeroConvenio)
                         ->first();
 
@@ -246,15 +292,11 @@ class ConvenioImportService
                         $convenio = Convenio::query()->create($payload);
                     }
 
-                    $convenioIdByNumero[$numeroConvenio] = $convenio->id;
-
-                    if ($orgaoNome !== null && $orgao === null) {
-                        $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', [
-                            'orgao' => $orgaoNome,
-                            'orgao_legacy_id' => $orgaoLegacyId,
-                        ]);
-                        $counters['pendencias']++;
+                    // ✅ Cache por numero_convenio (somente se não estiver ambiguo)
+                    if (! isset($numeroConvenioAmbiguo[$numeroConvenio])) {
+                        $convenioIdByNumero[$numeroConvenio] = $convenio->id;
                     }
+
                     if (($municipioNome !== null || $municipioIbge !== null) && $municipio === null) {
                         $this->registerPending($import, 'lista', $row->id, $row->row_number, $numeroConvenio, 'municipio_nao_encontrado', [
                             'municipio' => $municipioNome,
@@ -275,7 +317,7 @@ class ConvenioImportService
         ConvenioImportPiRow::query()
             ->where('import_id', $import->id)
             ->orderBy('id')
-            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByNumero): void {
+            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByNumero, &$numeroConvenioAmbiguo): void {
                 foreach ($rows as $row) {
                     $data = $row->normalized_data ?? [];
                     $numeroConvenio = $this->normalizeString($data['numero_convenio'] ?? null);
@@ -288,9 +330,19 @@ class ConvenioImportService
                         continue;
                     }
 
-                    $convenioId = $convenioIdByNumero[$numeroConvenio] ?? Convenio::query()->where('numero_convenio', $numeroConvenio)->value('id');
+                    // ✅ Resolve convenio_id só por numero_convenio
+                    [$convenioId, $reason] = $this->resolveConvenioIdByNumero($numeroConvenio, $convenioIdByNumero, $numeroConvenioAmbiguo);
+
                     if (! $convenioId) {
-                        $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'convenio_nao_encontrado', $row->raw_data ?? []);
+                        $this->registerPending(
+                            $import,
+                            'plano_interno',
+                            $row->id,
+                            $row->row_number,
+                            $numeroConvenio,
+                            $reason ?? 'convenio_nao_encontrado',
+                            $row->raw_data ?? []
+                        );
                         $row->update(['status' => 'pending', 'processed_at' => now()]);
                         $counters['pendencias']++;
                         continue;
@@ -306,7 +358,7 @@ class ConvenioImportService
         ConvenioImportParcelaRow::query()
             ->where('import_id', $import->id)
             ->orderBy('id')
-            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByNumero): void {
+            ->chunkById($batchSize, function ($rows) use ($import, &$counters, &$convenioIdByNumero, &$numeroConvenioAmbiguo): void {
                 foreach ($rows as $row) {
                     $data = $row->normalized_data ?? [];
                     $numeroConvenio = $this->normalizeString($data['numero_convenio'] ?? null);
@@ -319,9 +371,19 @@ class ConvenioImportService
                         continue;
                     }
 
-                    $convenioId = $convenioIdByNumero[$numeroConvenio] ?? Convenio::query()->where('numero_convenio', $numeroConvenio)->value('id');
+                    // ✅ Resolve convenio_id só por numero_convenio
+                    [$convenioId, $reason] = $this->resolveConvenioIdByNumero($numeroConvenio, $convenioIdByNumero, $numeroConvenioAmbiguo);
+
                     if (! $convenioId) {
-                        $this->registerPending($import, 'parcelas', $row->id, $row->row_number, $numeroConvenio, 'convenio_nao_encontrado', $row->raw_data ?? []);
+                        $this->registerPending(
+                            $import,
+                            'parcelas',
+                            $row->id,
+                            $row->row_number,
+                            $numeroConvenio,
+                            $reason ?? 'convenio_nao_encontrado',
+                            $row->raw_data ?? []
+                        );
                         $row->update(['status' => 'pending', 'processed_at' => now()]);
                         $counters['pendencias']++;
                         continue;
@@ -412,9 +474,9 @@ class ConvenioImportService
                 }
             }, 'id');
 
-        $totalIssues = $import->listaRows()->whereNotNull('issues')->count()
-            + $import->parcelasRows()->whereNotNull('issues')->count()
-            + $import->piRows()->whereNotNull('issues')->count()
+        $totalIssues = $import->listaRows()->whereJsonLength('issues', '>', 0)->count()
+            + $import->parcelasRows()->whereJsonLength('issues', '>', 0)->count()
+            + $import->piRows()->whereJsonLength('issues', '>', 0)->count()
             + $import->pendingItems()->count();
 
         $import->update([
@@ -439,6 +501,342 @@ class ConvenioImportService
         ]);
 
         return $import->fresh();
+    }
+
+    public function confirmPlanoInternoPorOrgao(ConvenioImport $import, bool $sync = true, int $batchSize = 500): ConvenioImport
+    {
+        $import->update(['status' => 'processing']);
+        $import->pendingItems()->delete();
+
+        $validRowsByKey = [];
+        $desiredPisByKey = [];
+        $validSiglas = [];
+        $orgaosNaoEncontrados = [];
+        $processados = 0;
+        $piUpsertRowsTotal = 0;
+        $piRemovidosTotal = 0;
+
+        ConvenioImportPiRow::query()
+            ->where('import_id', $import->id)
+            ->orderBy('id')
+            ->chunkById($batchSize, function ($rows) use (
+                $import,
+                &$validRowsByKey,
+                &$desiredPisByKey,
+                &$validSiglas,
+                &$orgaosNaoEncontrados
+            ): void {
+                foreach ($rows as $row) {
+                    $data = $row->normalized_data ?? [];
+                    $orgaoSigla = $this->normalizeUpperString($data['orgao'] ?? null);
+                    $numeroConvenio = $this->normalizeString($data['numero_convenio'] ?? null);
+                    $planoInternoRaw = $this->normalizeString($data['plano_interno'] ?? null);
+
+                    if ($orgaoSigla === null) {
+                        $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'orgao_ausente', $row->raw_data ?? []);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        continue;
+                    }
+
+                    if ($numeroConvenio === null) {
+                        $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, null, 'numero_convenio_ausente', $row->raw_data ?? []);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        continue;
+                    }
+
+                    if ($planoInternoRaw === null) {
+                        $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'plano_interno_ausente', $row->raw_data ?? []);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        continue;
+                    }
+
+                    $pis = $this->explodePlanoInternoValues($planoInternoRaw);
+                    if ($pis === []) {
+                        $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'plano_interno_ausente', $row->raw_data ?? []);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        continue;
+                    }
+
+                    $invalidPi = collect($pis)->first(fn (string $pi) => mb_strlen($pi) > 32);
+                    if ($invalidPi !== null) {
+                        $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'plano_interno_tamanho_invalido', [
+                            'orgao' => $orgaoSigla,
+                            'numero_convenio' => $numeroConvenio,
+                            'plano_interno' => $invalidPi,
+                        ]);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        continue;
+                    }
+
+                    $orgao = $this->resolveOrgao($orgaoSigla);
+                    if ($orgao === null) {
+                        $orgaosNaoEncontrados[$orgaoSigla] = true;
+                        $this->registerPending($import, 'plano_interno', $row->id, $row->row_number, $numeroConvenio, 'orgao_nao_encontrado', [
+                            'orgao' => $orgaoSigla,
+                            'numero_convenio' => $numeroConvenio,
+                            'plano_interno' => $planoInternoRaw,
+                        ]);
+                        $row->update(['status' => 'pending', 'processed_at' => now()]);
+                        continue;
+                    }
+
+                    $validSigla = strtoupper(trim((string) $orgao->sigla));
+                    $validSiglas[$validSigla] = true;
+                    $key = $this->makeConvenioKey((int) $orgao->id, $numeroConvenio);
+
+                    foreach ($pis as $pi) {
+                        $desiredPisByKey[$key][$pi] = true;
+                    }
+
+                    $validRowsByKey[$key][] = [
+                        'row_id' => (int) $row->id,
+                        'row_number' => (int) $row->row_number,
+                        'orgao' => $validSigla,
+                        'numero_convenio' => $numeroConvenio,
+                        'plano_interno' => $planoInternoRaw,
+                        'pis' => $pis,
+                    ];
+                }
+            }, 'id');
+
+        $multipleOrgaos = count($validSiglas) > 1;
+        if ($multipleOrgaos) {
+            $this->registerPending($import, 'plano_interno', null, null, null, 'orgao_multiplo_na_planilha', [
+                'siglas' => array_values(array_keys($validSiglas)),
+            ]);
+        }
+
+        $conveniosNaoEncontradosMap = [];
+        $conveniosNaoEncontradosPorOrgao = [];
+        $conveniosExcluidos = [];
+        $conveniosDuplicadosExcluidos = [];
+        $conveniosResolvidos = [];
+        $pendenciasExtras = 0;
+
+        foreach ($desiredPisByKey as $key => $desiredPisSet) {
+            [$orgaoId, $numeroConvenio] = $this->splitConvenioKey($key);
+            $rowsMeta = $validRowsByKey[$key] ?? [];
+            $firstMeta = $rowsMeta[0] ?? null;
+            $orgaoSigla = $firstMeta['orgao'] ?? null;
+
+            $activeConvenio = Convenio::query()
+                ->whereNull('deleted_at')
+                ->where('orgao_id', $orgaoId)
+                ->where('numero_convenio', $numeroConvenio)
+                ->first();
+
+            if (! $activeConvenio) {
+                $withTrashed = Convenio::query()
+                    ->withTrashed()
+                    ->where('orgao_id', $orgaoId)
+                    ->where('numero_convenio', $numeroConvenio)
+                    ->limit(2)
+                    ->get();
+
+                if ($withTrashed->count() === 0) {
+                    $uniqueKey = ($orgaoSigla ?? 'SEM_ORGAO').'|'.$numeroConvenio;
+                    $conveniosNaoEncontradosMap[$uniqueKey] = $numeroConvenio;
+                    if ($orgaoSigla !== null) {
+                        $conveniosNaoEncontradosPorOrgao[$orgaoSigla][$numeroConvenio] = true;
+                    }
+
+                    foreach ($rowsMeta as $meta) {
+                        $this->registerPending(
+                            $import,
+                            'plano_interno',
+                            (int) $meta['row_id'],
+                            (int) $meta['row_number'],
+                            (string) $meta['numero_convenio'],
+                            'convenio_nao_encontrado',
+                            [
+                                'orgao' => $meta['orgao'],
+                                'numero_convenio' => $meta['numero_convenio'],
+                                'plano_interno' => $meta['plano_interno'],
+                            ]
+                        );
+                        ConvenioImportPiRow::query()->where('id', $meta['row_id'])->update([
+                            'status' => 'pending',
+                            'processed_at' => now(),
+                        ]);
+                        $pendenciasExtras++;
+                    }
+
+                    continue;
+                }
+
+                if ($withTrashed->count() === 1 && $withTrashed->first()?->deleted_at !== null) {
+                    $conveniosExcluidos[$key] = true;
+                    foreach ($rowsMeta as $meta) {
+                        $this->registerPending(
+                            $import,
+                            'plano_interno',
+                            (int) $meta['row_id'],
+                            (int) $meta['row_number'],
+                            (string) $meta['numero_convenio'],
+                            'convenio_excluido',
+                            [
+                                'orgao' => $meta['orgao'],
+                                'numero_convenio' => $meta['numero_convenio'],
+                                'plano_interno' => $meta['plano_interno'],
+                            ]
+                        );
+                        ConvenioImportPiRow::query()->where('id', $meta['row_id'])->update([
+                            'status' => 'pending',
+                            'processed_at' => now(),
+                        ]);
+                        $pendenciasExtras++;
+                    }
+                    continue;
+                }
+
+                $conveniosDuplicadosExcluidos[$key] = true;
+                foreach ($rowsMeta as $meta) {
+                    $this->registerPending(
+                        $import,
+                        'plano_interno',
+                        (int) $meta['row_id'],
+                        (int) $meta['row_number'],
+                        (string) $meta['numero_convenio'],
+                        'convenio_duplicado_excluido',
+                        [
+                            'orgao' => $meta['orgao'],
+                            'numero_convenio' => $meta['numero_convenio'],
+                            'plano_interno' => $meta['plano_interno'],
+                        ]
+                    );
+                    ConvenioImportPiRow::query()->where('id', $meta['row_id'])->update([
+                        'status' => 'pending',
+                        'processed_at' => now(),
+                    ]);
+                    $pendenciasExtras++;
+                }
+                continue;
+            }
+
+            $desiredPis = array_values(array_keys($desiredPisSet));
+            if ($desiredPis !== []) {
+                $rows = array_map(
+                    fn (string $pi): array => [
+                        'convenio_id' => $activeConvenio->id,
+                        'plano_interno' => $pi,
+                    ],
+                    $desiredPis
+                );
+                ConvenioPlanoInterno::query()->upsert($rows, ['convenio_id', 'plano_interno'], []);
+                $piUpsertRowsTotal += count($rows);
+            }
+
+            if ($sync && ! $multipleOrgaos) {
+                $deleted = ConvenioPlanoInterno::query()
+                    ->where('convenio_id', $activeConvenio->id)
+                    ->when($desiredPis !== [], fn ($query) => $query->whereNotIn('plano_interno', $desiredPis))
+                    ->delete();
+                $piRemovidosTotal += $deleted;
+            }
+
+            foreach ($rowsMeta as $meta) {
+                ConvenioImportPiRow::query()->where('id', $meta['row_id'])->update([
+                    'status' => 'processed',
+                    'processed_at' => now(),
+                ]);
+                $processados++;
+            }
+
+            $conveniosResolvidos[$key] = true;
+        }
+
+        $totalPendencias = $import->pendingItems()->count();
+        $conveniosNaoEncontradosLista = array_values(array_unique(array_values($conveniosNaoEncontradosMap)));
+        sort($conveniosNaoEncontradosLista);
+
+        $conveniosNaoEncontradosPorOrgaoResumo = [];
+        foreach ($conveniosNaoEncontradosPorOrgao as $sigla => $numeros) {
+            $conveniosNaoEncontradosPorOrgaoResumo[$sigla] = count($numeros);
+        }
+
+        $resumoFinal = array_merge($import->resumo ?? [], [
+            'tipo' => 'plano_interno_por_orgao',
+            'convenios_nao_encontrados_total' => count($conveniosNaoEncontradosMap),
+            'convenios_nao_encontrados_lista' => array_slice($conveniosNaoEncontradosLista, 0, 50),
+            'convenios_nao_encontrados_por_orgao' => $conveniosNaoEncontradosPorOrgaoResumo,
+            'confirmacao_pi_por_orgao' => [
+                'sync_solicitado' => $sync,
+                'sync_executado' => $sync && ! $multipleOrgaos,
+                'sync_ignorado_motivo' => $sync && $multipleOrgaos ? 'orgao_multiplo_na_planilha' : null,
+                'linhas_processadas' => $processados,
+                'pendencias' => $totalPendencias,
+                'convenios_tocados_total' => count($desiredPisByKey),
+                'convenios_resolvidos_total' => count($conveniosResolvidos),
+                'pi_upsert_rows_total' => $piUpsertRowsTotal,
+                'pi_removidos_total' => $piRemovidosTotal,
+                'orgaos_nao_encontrados_total' => count($orgaosNaoEncontrados),
+                'orgaos_validos_na_planilha' => array_values(array_keys($validSiglas)),
+                'convenios_nao_encontrados_total' => count($conveniosNaoEncontradosMap),
+                'convenios_nao_encontrados_lista' => array_slice($conveniosNaoEncontradosLista, 0, 50),
+                'convenios_nao_encontrados_por_orgao' => $conveniosNaoEncontradosPorOrgaoResumo,
+                'convenios_excluidos_total' => count($conveniosExcluidos),
+                'convenios_duplicados_excluidos_total' => count($conveniosDuplicadosExcluidos),
+                'pendencias_resolucao_convenio_total' => $pendenciasExtras,
+            ],
+        ]);
+
+        Log::info('Importacao PI por orgao confirmada.', [
+            'import_id' => $import->id,
+            'convenios_nao_encontrados_total' => count($conveniosNaoEncontradosMap),
+            'resumo' => $resumoFinal['confirmacao_pi_por_orgao'] ?? [],
+        ]);
+
+        $import->update([
+            'status' => 'confirmed',
+            'confirmado_em' => now(),
+            'total_processados' => $processados,
+            'total_pendencias' => $totalPendencias,
+            'total_issues' => $import->piRows()->whereJsonLength('issues', '>', 0)->count() + $totalPendencias,
+            'resumo' => $resumoFinal,
+        ]);
+
+        return $import->fresh();
+    }
+
+    /**
+     * ✅ Resolve o convenio_id somente pelo numero_convenio.
+     * - Prioriza cache construído a partir da aba lista
+     * - Faz fallback no banco
+     * - Detecta ambiguidade (mais de 1 convênio com mesmo numero_convenio)
+     *
+     * @param  array<string, int>  $cache
+     * @param  array<string, bool> $ambiguous
+     * @return array{0: int|null, 1: string|null}
+     */
+    private function resolveConvenioIdByNumero(string $numeroConvenio, array &$cache, array &$ambiguous): array
+    {
+        if (isset($ambiguous[$numeroConvenio])) {
+            return [null, 'numero_convenio_ambiguo'];
+        }
+
+        if (isset($cache[$numeroConvenio]) && $cache[$numeroConvenio] > 0) {
+            return [$cache[$numeroConvenio], null];
+        }
+
+        $ids = Convenio::query()
+            ->where('numero_convenio', $numeroConvenio)
+            ->limit(2)
+            ->pluck('id');
+
+        if ($ids->count() === 1) {
+            $id = (int) $ids->first();
+            $cache[$numeroConvenio] = $id;
+
+            return [$id, null];
+        }
+
+        if ($ids->count() === 0) {
+            return [null, 'convenio_nao_encontrado'];
+        }
+
+        $ambiguous[$numeroConvenio] = true;
+
+        return [null, 'numero_convenio_ambiguo'];
     }
 
     /**
@@ -514,19 +912,21 @@ class ConvenioImportService
             if (in_array($sheetName, ['lista', 'parcelas', 'plano_interno'], true) && $normalizedData['numero_convenio'] === null) {
                 $issues[] = 'numero_convenio_ausente';
             }
-            if ($sheetName === 'parcelas' && $normalizedData['numero_parcela'] === null) {
+            if ($sheetName === 'parcelas' && ($normalizedData['numero_parcela'] ?? null) === null) {
                 $issues[] = 'numero_parcela_ausente';
             }
-            if ($sheetName === 'plano_interno' && $normalizedData['plano_interno'] === null) {
+            if ($sheetName === 'plano_interno' && ($normalizedData['plano_interno'] ?? null) === null) {
                 $issues[] = 'plano_interno_ausente';
             }
+
+            $issuesValue = $issues === [] ? null : $issues;
 
             $parsedRows[] = [
                 'row_number' => $rowNumber,
                 'raw_data' => $rawData,
                 'normalized_data' => $normalizedData,
-                'status' => $issues === [] ? 'parsed' : 'parsed_with_issues',
-                'issues' => $issues,
+                'status' => $issuesValue === null ? 'parsed' : 'parsed_with_issues',
+                'issues' => $issuesValue,
             ];
         }
 
@@ -634,6 +1034,46 @@ class ConvenioImportService
         return $string;
     }
 
+    private function normalizeUpperString(mixed $value): ?string
+    {
+        $string = $this->normalizeString($value);
+
+        return $string !== null ? strtoupper($string) : null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function explodePlanoInternoValues(string $value): array
+    {
+        $parts = preg_split('/[;,|]+/', $value) ?: [];
+        $normalized = [];
+        foreach ($parts as $part) {
+            $pi = $this->normalizeUpperString($part);
+            if ($pi === null) {
+                continue;
+            }
+            $normalized[$pi] = true;
+        }
+
+        return array_values(array_keys($normalized));
+    }
+
+    private function makeConvenioKey(int $orgaoId, string $numeroConvenio): string
+    {
+        return $orgaoId.'|'.$numeroConvenio;
+    }
+
+    /**
+     * @return array{0: int, 1: string}
+     */
+    private function splitConvenioKey(string $key): array
+    {
+        [$orgaoId, $numeroConvenio] = explode('|', $key, 2);
+
+        return [(int) $orgaoId, $numeroConvenio];
+    }
+
     private function normalizeInteger(mixed $value): ?int
     {
         if ($value === null || trim((string) $value) === '') {
@@ -648,25 +1088,9 @@ class ConvenioImportService
         return (int) $stringValue;
     }
 
-    private function normalizeDecimal(mixed $value): ?float
+    private function normalizeDecimal(mixed $value): ?string
     {
-        if ($value === null || trim((string) $value) === '') {
-            return null;
-        }
-
-        $raw = trim((string) $value);
-        $raw = preg_replace('/[^\d,.-]/', '', $raw) ?? '';
-
-        if (str_contains($raw, ',') && str_contains($raw, '.')) {
-            $stringValue = str_replace('.', '', $raw);
-            $stringValue = str_replace(',', '.', $stringValue);
-        } elseif (str_contains($raw, ',')) {
-            $stringValue = str_replace(',', '.', $raw);
-        } else {
-            $stringValue = $raw;
-        }
-
-        return is_numeric($stringValue) ? (float) $stringValue : null;
+        return PtBrNumberParser::parseDecimal($value);
     }
 
     /**
@@ -690,10 +1114,23 @@ class ConvenioImportService
             }
         }
 
-        $formats = ['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y'];
+        $rawDate = trim((string) $value);
+        $twoDigitYear = preg_match('/^\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2}$/', $rawDate) === 1;
+        $formats = $twoDigitYear
+            ? ['d/m/y', 'd-m-y', 'd.m.y', 'Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y']
+            : ['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y', 'd/m/y', 'd-m-y', 'd.m.y'];
+
         foreach ($formats as $format) {
             try {
-                return Carbon::createFromFormat($format, trim((string) $value))->format('Y-m-d');
+                $date = Carbon::createFromFormat($format, $rawDate);
+                if (str_contains($format, 'y') && ! str_contains($format, 'Y')) {
+                    $year = (int) $date->format('Y');
+                    if ($year < 100) {
+                        $date->setYear($year + 2000);
+                    }
+                }
+
+                return $date->format('Y-m-d');
             } catch (\Throwable) {
             }
         }
@@ -709,35 +1146,18 @@ class ConvenioImportService
         }
     }
 
-    private function resolveOrgao(?int $legacyId, ?string $valor): ?Orgao
+    private function resolveOrgao(?string $valor): ?Orgao
     {
-        if ($legacyId !== null) {
-            $porCodigo = Orgao::query()->where('codigo_sigplan', $legacyId)->first();
-            if ($porCodigo !== null) {
-                return $porCodigo;
-            }
-        }
-
         if ($valor === null) {
             return null;
         }
 
         $sigla = strtoupper(trim($valor));
-        $bySigla = Orgao::query()->whereRaw('UPPER(sigla) = ?', [$sigla])->first();
-        if ($bySigla !== null) {
-            return $bySigla;
-        }
-
-        $normalized = $this->normalizeTextForMatch($valor);
-        if ($normalized === '') {
+        if ($sigla === '') {
             return null;
         }
 
-        return Orgao::query()
-            ->get(['id', 'sigla', 'nome'])
-            ->first(function (Orgao $orgao) use ($normalized): bool {
-                return $this->normalizeTextForMatch($orgao->nome) === $normalized;
-            });
+        return Orgao::query()->whereRaw('UPPER(sigla) = ?', [$sigla])->first();
     }
 
     private function resolveMunicipio(?string $nome, ?string $codigoIbge): ?Municipio
@@ -761,16 +1181,23 @@ class ConvenioImportService
             return $byNomeExato;
         }
 
-        $normalized = $this->normalizeTextForMatch($nome);
-        if ($normalized === '') {
+        $normalized = TextNormalizer::normalizeForMatch($nome);
+        if ($normalized === null) {
             return null;
         }
 
-        return Municipio::query()
+        $matches = Municipio::query()
             ->get(['id', 'nome'])
-            ->first(function (Municipio $municipio) use ($normalized): bool {
-                return $this->normalizeTextForMatch($municipio->nome) === $normalized;
-            });
+            ->filter(function (Municipio $municipio) use ($normalized): bool {
+                return TextNormalizer::normalizeForMatch($municipio->nome) === $normalized;
+            })
+            ->values();
+
+        if ($matches->count() !== 1) {
+            return null;
+        }
+
+        return $matches->first();
     }
 
     private function upsertPlanoInterno(int $convenioId, string $planoInterno): void
@@ -782,22 +1209,6 @@ class ConvenioImportService
             ],
             []
         );
-    }
-
-    private function normalizeTextForMatch(?string $value): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        $normalized = Str::of($value)
-            ->ascii()
-            ->lower()
-            ->replaceMatches('/[^a-z0-9]+/', ' ')
-            ->trim()
-            ->toString();
-
-        return preg_replace('/\s+/', ' ', $normalized) ?? '';
     }
 
     /**

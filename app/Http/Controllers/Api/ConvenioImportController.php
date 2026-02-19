@@ -9,6 +9,8 @@ use App\Http\Resources\ConvenioImportResource;
 use App\Models\ConvenioImport;
 use App\Services\ConvenioImportService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class ConvenioImportController extends Controller
 {
@@ -21,6 +23,25 @@ class ConvenioImportController extends Controller
         $import = $this->service->uploadAndParse($request->file('arquivo'));
 
         return $this->asJson($this->loadPreview($import), 'Arquivo importado para staging.', 201);
+    }
+
+    public function uploadPi(UploadConvenioImportRequest $request): JsonResponse
+    {
+        $import = $this->service->uploadAndParse($request->file('arquivo'));
+        $sheetFound = (bool) data_get($import->resumo, 'sheets.plano_interno.encontrada', false);
+        if (! $sheetFound) {
+            throw ValidationException::withMessages([
+                'arquivo' => ['A planilha deve conter a aba "plano_interno".'],
+            ]);
+        }
+
+        $import->update([
+            'resumo' => array_merge($import->resumo ?? [], [
+                'tipo' => 'plano_interno_por_orgao',
+            ]),
+        ]);
+
+        return $this->asJson($this->loadPreview($import->fresh()), 'Arquivo PI por orgao importado para staging.', 201);
     }
 
     public function index(): JsonResponse
@@ -52,6 +73,15 @@ class ConvenioImportController extends Controller
         $import = ConvenioImport::query()->findOrFail($id);
 
         return $this->asJson($this->loadPreview($import), 'Status da importacao.');
+    }
+
+    public function confirmPi(Request $request, ConvenioImport $import): JsonResponse
+    {
+        $sync = filter_var($request->query('sync', '1'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        $batchSize = max(50, min((int) $request->query('batch_size', 500), 2000));
+        $import = $this->service->confirmPlanoInternoPorOrgao($import, $sync ?? true, $batchSize);
+
+        return $this->asJson($this->loadPreview($import), 'Importacao de PI por orgao confirmada.');
     }
 
     private function loadPreview(ConvenioImport $import): ConvenioImport

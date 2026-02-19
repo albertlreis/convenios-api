@@ -8,6 +8,8 @@ use App\Models\Municipio;
 use App\Models\Orgao;
 use App\Models\Parcela;
 use App\Support\NormalizeParcelaStatus;
+use App\Support\PtBrNumberParser;
+use App\Support\TextNormalizer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -217,22 +219,32 @@ class ImportConveniosXlsx extends Command
             return null;
         }
 
-        return Municipio::query()
+        $exact = Municipio::query()
             ->whereRaw('LOWER(nome) = ?', [mb_strtolower($nomeMunicipio)])
             ->where('uf', strtoupper($uf))
             ->first();
+        if ($exact) {
+            return $exact;
+        }
+
+        $normalized = TextNormalizer::normalizeForMatch($nomeMunicipio);
+        if ($normalized === null) {
+            return null;
+        }
+
+        return Municipio::query()
+            ->where('uf', strtoupper($uf))
+            ->get(['id', 'nome', 'uf'])
+            ->first(fn (Municipio $municipio) => TextNormalizer::normalizeForMatch($municipio->nome) === $normalized);
     }
 
     private function resolveConvenio(?string $numeroConvenio, ?int $orgaoId): Convenio
     {
-        if ($numeroConvenio !== null) {
-            $query = Convenio::query()->where('numero_convenio', $numeroConvenio);
-
-            if ($orgaoId !== null) {
-                $query->where('orgao_id', $orgaoId);
-            }
-
-            $convenio = $query->first();
+        if ($numeroConvenio !== null && $orgaoId !== null) {
+            $convenio = Convenio::query()
+                ->where('numero_convenio', $numeroConvenio)
+                ->where('orgao_id', $orgaoId)
+                ->first();
             if ($convenio) {
                 return $convenio;
             }
@@ -322,17 +334,7 @@ class ImportConveniosXlsx extends Command
 
     private function parseDecimal(?string $value): ?string
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        $normalized = str_replace(['.', ','], ['', '.'], preg_replace('/[^\d,.-]/', '', $value) ?? '');
-
-        if (! is_numeric($normalized)) {
-            return null;
-        }
-
-        return number_format((float) $normalized, 2, '.', '');
+        return PtBrNumberParser::parseDecimal($value);
     }
 
     private function parseInteger(?string $value): ?int

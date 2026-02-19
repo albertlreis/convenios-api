@@ -103,6 +103,7 @@ class ConvenioImportFlowTest extends TestCase
             parcelasRows: [
                 [
                     'numero_convenio' => 'CV-100/2026',
+                    'orgao' => 'SETESTE',
                     'numero_parcela' => '1',
                     'valor_previsto' => '500,00',
                     'situacao' => 'PREVISTA',
@@ -112,6 +113,7 @@ class ConvenioImportFlowTest extends TestCase
                 ],
                 [
                     'numero_convenio' => 'CV-INEXISTENTE',
+                    'orgao' => 'SETESTE',
                     'numero_parcela' => '1',
                     'valor_previsto' => '300,00',
                     'situacao' => 'PREVISTA',
@@ -123,6 +125,7 @@ class ConvenioImportFlowTest extends TestCase
             piRows: [
                 [
                     'numero_convenio' => 'CV-100/2026',
+                    'orgao' => 'SETESTE',
                     'plano_interno' => 'PI000000003',
                 ],
             ]
@@ -158,7 +161,7 @@ class ConvenioImportFlowTest extends TestCase
         ]);
         $this->assertDatabaseHas('parcela', [
             'numero' => 1,
-            'convenio_id' => Convenio::query()->where('numero_convenio', 'CV-100/2026')->value('id'),
+            'convenio_id' => Convenio::query()->where('numero_convenio', 'CV-100/2026')->where('orgao_id', $orgao->id)->value('id'),
         ]);
     }
 
@@ -192,6 +195,7 @@ class ConvenioImportFlowTest extends TestCase
             piRows: [
                 [
                     'numero_convenio' => 'CV-300/2026',
+                    'orgao' => 'SETESTE',
                     'plano_interno' => ' pi000000999 ',
                 ],
             ]
@@ -262,6 +266,7 @@ class ConvenioImportFlowTest extends TestCase
             parcelasRows: [
                 [
                     'numero_convenio' => 'CV-400/2026',
+                    'orgao' => 'SETESTE',
                     'numero_parcela' => '1',
                     'valor_previsto' => '500,00',
                     'situacao' => 'PAGO/OK',
@@ -271,6 +276,7 @@ class ConvenioImportFlowTest extends TestCase
                 ],
                 [
                     'numero_convenio' => 'CV-400/2026',
+                    'orgao' => 'SETESTE',
                     'numero_parcela' => '2',
                     'valor_previsto' => '500,00',
                     'situacao' => 'EM ABERTO',
@@ -299,6 +305,107 @@ class ConvenioImportFlowTest extends TestCase
         ]);
     }
 
+    public function test_import_resolve_municipio_sem_acento_e_parse_pt_br(): void
+    {
+        $orgao = Orgao::query()->create([
+            'sigla' => 'SETESTE',
+            'nome' => 'Secretaria de Teste',
+        ]);
+
+        $municipio = Municipio::query()
+            ->where('nome', 'Belém')
+            ->where('uf', 'PA')
+            ->first();
+        if (! $municipio) {
+            $municipio = Municipio::query()->create([
+                'regiao_id' => null,
+                'nome' => 'Belém',
+                'uf' => 'PA',
+                'codigo_ibge' => '1501402',
+                'codigo_tse' => 1002,
+            ]);
+        }
+
+        $file = $this->buildImportFile(
+            listaRows: [[
+                'orgao' => 'SETESTE',
+                'municipio' => 'Belem',
+                'convenente' => 'Prefeitura de Belem',
+                'numero_convenio' => 'CV-500/2026',
+                'ano' => '2026',
+                'valor_total' => 'R$ 1.234.567,89',
+                'valor_orgao' => '1.000.000,00',
+                'valor_contrapartida' => '234.567,89',
+            ]],
+            parcelasRows: [[
+                'numero_convenio' => 'CV-500/2026',
+                'orgao' => 'SETESTE',
+                'numero_parcela' => '1',
+                'valor_previsto' => '123.456,78',
+                'situacao' => 'EM ABERTO',
+                'valor_pago' => '0,00',
+            ]],
+            piRows: []
+        );
+
+        $upload = $this->postJson('/api/v1/imports/convenios/upload', ['arquivo' => $file])->assertCreated();
+        $importId = $upload->json('data.id');
+
+        $this->postJson('/api/v1/imports/convenios/confirm', ['import_id' => $importId])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'confirmed');
+
+        $this->assertDatabaseHas('convenio', [
+            'orgao_id' => $orgao->id,
+            'municipio_id' => $municipio->id,
+            'numero_convenio' => 'CV-500/2026',
+            'valor_total_informado' => '1234567.89',
+            'valor_orgao' => '1000000.00',
+        ]);
+        $this->assertDatabaseHas('parcela', [
+            'valor_previsto' => '123456.78',
+            'valor_pago' => '0.00',
+        ]);
+    }
+
+    public function test_import_parcelas_sem_orgao_gera_pendencia(): void
+    {
+        Orgao::query()->create([
+            'sigla' => 'SETESTE',
+            'nome' => 'Secretaria de Teste',
+        ]);
+        Municipio::factory()->create(['nome' => 'Municipio Bom Import']);
+
+        $file = $this->buildImportFile(
+            listaRows: [[
+                'orgao' => 'SETESTE',
+                'municipio' => 'Municipio Bom Import',
+                'convenente' => 'Prefeitura',
+                'numero_convenio' => 'CV-700/2026',
+                'ano' => '2026',
+            ]],
+            parcelasRows: [[
+                'numero_convenio' => 'CV-700/2026',
+                'numero_parcela' => '1',
+                'valor_previsto' => '10,00',
+                'situacao' => 'EM ABERTO',
+            ]],
+            piRows: []
+        );
+
+        $upload = $this->postJson('/api/v1/imports/convenios/upload', ['arquivo' => $file])->assertCreated();
+        $importId = $upload->json('data.id');
+
+        $this->postJson('/api/v1/imports/convenios/confirm', ['import_id' => $importId])
+            ->assertOk();
+
+        $this->assertDatabaseHas('convenio_import_pending_items', [
+            'import_id' => $importId,
+            'source_sheet' => 'parcelas',
+            'reason' => 'orgao_nao_encontrado',
+        ]);
+    }
+
     private function buildImportFile(array $listaRows, array $parcelasRows, array $piRows): UploadedFile
     {
         $spreadsheet = new Spreadsheet;
@@ -313,12 +420,12 @@ class ConvenioImportFlowTest extends TestCase
         );
         $this->writeSheet(
             $spreadsheet->getSheetByName('parcelas'),
-            ['numero_convenio', 'numero_parcela', 'valor_previsto', 'situacao', 'data_pagamento', 'valor_pago', 'observacoes'],
+            ['numero_convenio', 'orgao', 'numero_parcela', 'valor_previsto', 'situacao', 'data_pagamento', 'valor_pago', 'observacoes'],
             $parcelasRows
         );
         $this->writeSheet(
             $spreadsheet->getSheetByName('plano_interno'),
-            ['numero_convenio', 'plano_interno'],
+            ['numero_convenio', 'orgao', 'plano_interno'],
             $piRows
         );
 

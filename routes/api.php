@@ -12,7 +12,7 @@ use App\Http\Controllers\Api\MunicipioDemografiaController;
 use App\Http\Controllers\Api\MunicipioIndicadoresController;
 use App\Http\Controllers\Api\OrgaoController;
 use App\Http\Controllers\Api\ParcelaController;
-use App\Http\Controllers\Api\PartidoController;ghffgdhfdgh
+use App\Http\Controllers\Api\PartidoController;
 use App\Http\Controllers\Api\PrefeitoController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,7 +21,9 @@ Route::prefix('v1')->group(function (): void {
 
     Route::get('imports/convenios', [ConvenioImportController::class, 'index']);
     Route::post('imports/convenios/upload', [ConvenioImportController::class, 'upload']);
+    Route::post('imports/convenios/upload-pi', [ConvenioImportController::class, 'uploadPi']);
     Route::post('imports/convenios/confirm', [ConvenioImportController::class, 'confirm']);
+    Route::post('imports/convenios/{import}/confirm-pi', [ConvenioImportController::class, 'confirmPi']);
     Route::get('imports/convenios/{id}', [ConvenioImportController::class, 'show']);
 
     Route::get('convenios/indicadores/quantidade-com-parcelas-em-aberto', [ConvenioIndicadoresController::class, 'quantidadeComParcelasEmAberto']);
