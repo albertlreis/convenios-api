@@ -782,6 +782,7 @@ class ConvenioImportService
 
         Log::info('Importacao PI por orgao confirmada.', [
             'import_id' => $import->id,
+            'convenios_nao_encontrados_total' => count($conveniosNaoEncontradosMap),
             'resumo' => $resumoFinal['confirmacao_pi_por_orgao'] ?? [],
         ]);
 
