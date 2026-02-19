@@ -21,7 +21,9 @@ Route::prefix('v1')->group(function (): void {
 
     Route::get('imports/convenios', [ConvenioImportController::class, 'index']);
     Route::post('imports/convenios/upload', [ConvenioImportController::class, 'upload']);
+    Route::post('imports/convenios/upload-pi', [ConvenioImportController::class, 'uploadPi']);
     Route::post('imports/convenios/confirm', [ConvenioImportController::class, 'confirm']);
+    Route::post('imports/convenios/{import}/confirm-pi', [ConvenioImportController::class, 'confirmPi']);
     Route::get('imports/convenios/{id}', [ConvenioImportController::class, 'show']);
 
     Route::get('convenios/indicadores/quantidade-com-parcelas-em-aberto', [ConvenioIndicadoresController::class, 'quantidadeComParcelasEmAberto']);
