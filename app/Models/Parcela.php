@@ -19,10 +19,7 @@ class Parcela extends Model
 
     public static function emAbertoCondition(string $tableAlias = 'parcela'): string
     {
-        return sprintf(
-            '((%1$s.valor_previsto = 0 AND %1$s.data_pagamento IS NULL AND %1$s.situacao <> \'PAGA\') OR ((%1$s.valor_previsto IS NULL OR %1$s.valor_previsto <> 0) AND (%1$s.data_pagamento IS NULL OR %1$s.valor_pago IS NULL OR (%1$s.valor_previsto IS NOT NULL AND %1$s.valor_pago < %1$s.valor_previsto))))',
-            $tableAlias
-        );
+        return sprintf("%s.situacao = 'PREVISTA'", $tableAlias);
     }
 
     protected function casts(): array
@@ -39,7 +36,7 @@ class Parcela extends Model
 
     public function scopeEmAberto(Builder $query): Builder
     {
-        return $query->whereRaw(self::emAbertoCondition($query->getModel()->getTable()));
+        return $query->where('situacao', 'PREVISTA');
     }
 
     public function convenio(): BelongsTo
