@@ -20,14 +20,39 @@ class ConvenioImportController extends Controller
 
     public function upload(UploadConvenioImportRequest $request): JsonResponse
     {
-        $import = $this->service->uploadAndParse($request->file('arquivo'));
+        $files = $request->importFiles();
+        if ($files === []) {
+            throw ValidationException::withMessages([
+                'arquivo' => ['Envie ao menos um arquivo XLSX.'],
+            ]);
+        }
+
+        if ($request->isMultiUploadRequest()) {
+            $results = $this->service->uploadAndParseMany($files);
+            $hasErrors = collect($results)->contains(fn (array $item): bool => ($item['status'] ?? null) === 'ERRO');
+
+            return response()->json([
+                'sucesso' => true,
+                'mensagem' => 'Arquivos processados para staging.',
+                'data' => $results,
+            ], $hasErrors ? 207 : 201);
+        }
+
+        $import = $this->service->uploadAndParse($files[0], ['lista', 'parcelas', 'plano_interno']);
 
         return $this->asJson($this->loadPreview($import), 'Arquivo importado para staging.', 201);
     }
 
     public function uploadPi(UploadConvenioImportRequest $request): JsonResponse
     {
-        $import = $this->service->uploadAndParse($request->file('arquivo'));
+        $file = $request->file('arquivo');
+        if (! $file) {
+            throw ValidationException::withMessages([
+                'arquivo' => ['Envie um arquivo no campo "arquivo" para importacao de PI por orgao.'],
+            ]);
+        }
+
+        $import = $this->service->uploadAndParse($file, ['plano_interno']);
         $sheetFound = (bool) data_get($import->resumo, 'sheets.plano_interno.encontrada', false);
         if (! $sheetFound) {
             throw ValidationException::withMessages([

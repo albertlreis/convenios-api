@@ -103,7 +103,6 @@ class ConvenioImportFlowTest extends TestCase
             parcelasRows: [
                 [
                     'numero_convenio' => 'CV-100/2026',
-                    'orgao' => 'SETESTE',
                     'numero_parcela' => '1',
                     'valor_previsto' => '500,00',
                     'situacao' => 'PREVISTA',
@@ -113,7 +112,6 @@ class ConvenioImportFlowTest extends TestCase
                 ],
                 [
                     'numero_convenio' => 'CV-INEXISTENTE',
-                    'orgao' => 'SETESTE',
                     'numero_parcela' => '1',
                     'valor_previsto' => '300,00',
                     'situacao' => 'PREVISTA',
@@ -125,7 +123,6 @@ class ConvenioImportFlowTest extends TestCase
             piRows: [
                 [
                     'numero_convenio' => 'CV-100/2026',
-                    'orgao' => 'SETESTE',
                     'plano_interno' => 'PI000000003',
                 ],
             ]
@@ -266,7 +263,6 @@ class ConvenioImportFlowTest extends TestCase
             parcelasRows: [
                 [
                     'numero_convenio' => 'CV-400/2026',
-                    'orgao' => 'SETESTE',
                     'numero_parcela' => '1',
                     'valor_previsto' => '500,00',
                     'situacao' => 'PAGO/OK',
@@ -276,7 +272,6 @@ class ConvenioImportFlowTest extends TestCase
                 ],
                 [
                     'numero_convenio' => 'CV-400/2026',
-                    'orgao' => 'SETESTE',
                     'numero_parcela' => '2',
                     'valor_previsto' => '500,00',
                     'situacao' => 'EM ABERTO',
@@ -339,7 +334,6 @@ class ConvenioImportFlowTest extends TestCase
             ]],
             parcelasRows: [[
                 'numero_convenio' => 'CV-500/2026',
-                'orgao' => 'SETESTE',
                 'numero_parcela' => '1',
                 'valor_previsto' => '123.456,78',
                 'situacao' => 'EM ABERTO',
@@ -368,7 +362,7 @@ class ConvenioImportFlowTest extends TestCase
         ]);
     }
 
-    public function test_import_parcelas_sem_orgao_gera_pendencia(): void
+    public function test_import_parcelas_sem_orgao_nao_gera_pendencia_orgao_nao_encontrado(): void
     {
         Orgao::query()->create([
             'sigla' => 'SETESTE',
@@ -399,9 +393,56 @@ class ConvenioImportFlowTest extends TestCase
         $this->postJson('/api/v1/imports/convenios/confirm', ['import_id' => $importId])
             ->assertOk();
 
-        $this->assertDatabaseHas('convenio_import_pending_items', [
+        $this->assertDatabaseMissing('convenio_import_pending_items', [
             'import_id' => $importId,
-            'source_sheet' => 'parcelas',
+            'reason' => 'orgao_nao_encontrado',
+        ]);
+        $this->assertDatabaseHas('parcela', [
+            'numero' => 1,
+        ]);
+    }
+
+    public function test_confirm_com_sigla_valida_preenche_orgao_id_sem_pendencia_orgao_nao_encontrado(): void
+    {
+        $orgao = Orgao::query()->create([
+            'sigla' => 'SETESTE',
+            'nome' => 'Secretaria de Teste',
+        ]);
+        Municipio::factory()->create(['nome' => 'Municipio Bom Import']);
+
+        $file = $this->buildImportFile(
+            listaRows: [[
+                'orgao' => 'SETESTE',
+                'municipio' => 'Municipio Bom Import',
+                'convenente' => 'Prefeitura',
+                'numero_convenio' => 'CV-800/2026',
+                'ano' => '2026',
+            ]],
+            parcelasRows: [[
+                'numero_convenio' => 'CV-800/2026',
+                'numero_parcela' => '1',
+                'valor_previsto' => '10,00',
+                'situacao' => 'EM ABERTO',
+            ]],
+            piRows: [[
+                'numero_convenio' => 'CV-800/2026',
+                'plano_interno' => 'PI000008000',
+            ]]
+        );
+
+        $upload = $this->postJson('/api/v1/imports/convenios/upload', ['arquivo' => $file])->assertCreated();
+        $importId = (int) $upload->json('data.id');
+
+        $this->postJson('/api/v1/imports/convenios/confirm', ['import_id' => $importId])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'confirmed');
+
+        $this->assertDatabaseHas('convenio', [
+            'numero_convenio' => 'CV-800/2026',
+            'orgao_id' => $orgao->id,
+        ]);
+        $this->assertDatabaseMissing('convenio_import_pending_items', [
+            'import_id' => $importId,
             'reason' => 'orgao_nao_encontrado',
         ]);
     }
@@ -420,12 +461,12 @@ class ConvenioImportFlowTest extends TestCase
         );
         $this->writeSheet(
             $spreadsheet->getSheetByName('parcelas'),
-            ['numero_convenio', 'orgao', 'numero_parcela', 'valor_previsto', 'situacao', 'data_pagamento', 'valor_pago', 'observacoes'],
+            ['numero_convenio', 'numero_parcela', 'valor_previsto', 'situacao', 'data_pagamento', 'valor_pago', 'observacoes'],
             $parcelasRows
         );
         $this->writeSheet(
             $spreadsheet->getSheetByName('plano_interno'),
-            ['numero_convenio', 'orgao', 'plano_interno'],
+            ['numero_convenio', 'plano_interno'],
             $piRows
         );
 

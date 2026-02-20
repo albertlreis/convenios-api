@@ -23,6 +23,7 @@ class ConvenioImportPlanoInternoPorOrgaoTest extends TestCase
             'orgao_id' => $orgao->id,
             'numero_convenio' => 'CV-PI-001/2026',
         ]);
+        ConvenioPlanoInterno::query()->where('convenio_id', $convenio->id)->delete();
 
         $file = $this->buildPiImportFile([
             ['orgao' => 'SEGOV', 'numero_convenio' => 'CV-PI-001/2026', 'plano_interno' => 'PI-AAA-001'],
@@ -45,6 +46,7 @@ class ConvenioImportPlanoInternoPorOrgaoTest extends TestCase
             'orgao_id' => $orgao->id,
             'numero_convenio' => 'CV-PI-002/2026',
         ]);
+        ConvenioPlanoInterno::query()->where('convenio_id', $convenio->id)->delete();
 
         $rows = [
             ['orgao' => 'SEHAB', 'numero_convenio' => 'CV-PI-002/2026', 'plano_interno' => 'PI-CCC-003'],
@@ -221,4 +223,3 @@ class ConvenioImportPlanoInternoPorOrgaoTest extends TestCase
         );
     }
 }
-
