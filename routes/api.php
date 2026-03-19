@@ -34,6 +34,7 @@ Route::prefix('v1')->group(function (): void {
     Route::get('convenios/{convenio}/parcelas', [ConvenioController::class, 'parcelas']);
     Route::get('convenios/{convenio}/parcelas-em-aberto', [ConvenioController::class, 'parcelasEmAberto']);
     Route::get('convenios/{convenio}/financeiro', [FinanceiroController::class, 'showByConvenio']);
+    Route::get('convenios/{convenio}/pdf', [ConvenioController::class, 'pdf']);
     Route::match(['post', 'patch'], 'convenios/{convenio}/restore', [ConvenioController::class, 'restore']);
     Route::apiResource('convenios', ConvenioController::class)->parameters([
         'convenios' => 'convenio',

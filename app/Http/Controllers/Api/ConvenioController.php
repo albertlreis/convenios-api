@@ -10,6 +10,7 @@ use App\Http\Resources\ParcelaResource;
 use App\Models\Convenio;
 use App\Models\ConvenioPlanoInterno;
 use App\Support\LatestMunicipioDemografia;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -407,6 +408,52 @@ class ConvenioController extends Controller
             ->withQueryString();
 
         return ParcelaResource::collection($parcelas);
+    }
+
+    public function pdf(int $convenio)
+    {
+        $convenioModel = Convenio::query()
+            ->with(['orgao', 'municipio.regiaoIntegracao', 'planosInternos'])
+            ->withTrashed()
+            ->whereKey($convenio)
+            ->withParcelasAgg()
+            ->firstOrFail();
+
+        $parcelas = $convenioModel->parcelas()
+            ->orderBy('numero')
+            ->get();
+
+        $valorPrevistoTotal = (float) ($convenioModel->valor_previsto_total ?? 0);
+        $valorPagoTotal = (float) ($convenioModel->valor_pago_total ?? 0);
+        $valorEmAbertoTotal = (float) ($convenioModel->valor_em_aberto_total ?? 0);
+
+        if ($valorPrevistoTotal <= 0 && $valorPagoTotal <= 0 && $parcelas->isNotEmpty()) {
+            $valorPrevistoTotal = $parcelas->sum(fn ($p) => (float) ($p->valor_previsto ?? 0));
+            $valorPagoTotal = $parcelas->sum(fn ($p) => (float) ($p->valor_pago ?? 0));
+            $valorEmAbertoTotal = $parcelas->filter(fn ($p) => $p->situacao === 'PREVISTA')
+                ->sum(fn ($p) => max(0, (float) ($p->valor_previsto ?? 0) - (float) ($p->valor_pago ?? 0)));
+        }
+
+        $convenio = ConvenioResource::make($convenioModel)->resolve();
+        $agregados = [
+            'valor_total_parcelas' => $valorPrevistoTotal,
+            'valor_pago' => $valorPagoTotal,
+            'valor_em_aberto' => $valorEmAbertoTotal,
+            'percentual_execucao' => $this->calcExecucaoPercentual($valorPrevistoTotal, $valorPagoTotal),
+        ];
+
+        $parcelasResolvedRaw = ParcelaResource::collection($parcelas)->resolve();
+        $parcelasResolved = isset($parcelasResolvedRaw['data']) ? $parcelasResolvedRaw['data'] : $parcelasResolvedRaw;
+
+        $pdf = Pdf::loadView('pdf.convenio', [
+            'convenio' => $convenio,
+            'agregados' => $agregados,
+            'parcelas' => is_array($parcelasResolved) ? $parcelasResolved : [],
+        ])->setPaper('a4');
+
+        $filename = 'convenio-'.preg_replace('/[^0-9a-zA-Z\-]/', '-', (string) ($convenio['numero_convenio'] ?? $convenio['id'])).'.pdf';
+
+        return $pdf->download($filename);
     }
 
     private function buildConvenioIndexQuery(Request $request)
