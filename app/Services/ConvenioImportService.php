@@ -17,15 +17,25 @@ use App\Support\PtBrNumberParser;
 use App\Support\TextNormalizer;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 
 class ConvenioImportService
 {
+    /**
+     * @return array<int, string>
+     */
+    private function requiredSheetsDefault(): array
+    {
+        return ['lista', 'parcelas', 'plano_interno'];
+    }
+
     /**
      * @return array<string, array<string, mixed>>
      */
@@ -61,6 +71,7 @@ class ConvenioImportService
 
             // ✅ PI também não depende de orgao; vínculo é numero_convenio.
             'plano_interno' => [
+                // Suporta fluxo dedicado de PI por órgão; no fluxo padrão (confirmImport) esse campo é ignorado.
                 'orgao' => ['orgao'],
                 'numero_convenio' => ['numero_convenio'],
                 'plano_interno' => ['plano_interno'],
@@ -68,49 +79,272 @@ class ConvenioImportService
         ];
     }
 
-    public function uploadAndParse(UploadedFile $file): ConvenioImport
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private function expectedRequiredHeaders(): array
     {
+        return [
+            'lista' => ['orgao', 'numero_convenio'],
+            'parcelas' => ['numero_convenio', 'numero_parcela', 'situacao'],
+            'plano_interno' => ['numero_convenio', 'plano_interno'],
+        ];
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private function expectedSheetAliases(): array
+    {
+        return [
+            'lista' => ['lista', 'tb_lista'],
+            'parcelas' => ['parcelas', 'tb_parcelas'],
+            'plano_interno' => ['plano_interno', 'tb_plano_interno'],
+        ];
+    }
+
+    /**
+     * @param  array<int, UploadedFile>  $files
+     * @param  array<int, string>|null  $requiredSheets
+     * @return array<int, array{
+     *     original_name: string,
+     *     import_id: int|null,
+     *     status: 'OK'|'ERRO',
+     *     pendencias_count: int,
+     *     rows: array{lista: int, parcelas: int, plano_interno: int},
+     *     errors: array<int, string>
+     * }>
+     */
+    public function uploadAndParseMany(array $files, ?array $requiredSheets = null): array
+    {
+        $results = [];
+
+        foreach ($files as $file) {
+            try {
+                $import = $this->uploadAndParse($file, $requiredSheets);
+                $results[] = [
+                    'original_name' => $file->getClientOriginalName(),
+                    'import_id' => $import->id,
+                    'status' => 'OK',
+                    'pendencias_count' => (int) $import->total_pendencias,
+                    'rows' => [
+                        'lista' => (int) $import->total_lista_rows,
+                        'parcelas' => (int) $import->total_parcelas_rows,
+                        'plano_interno' => (int) $import->total_pi_rows,
+                    ],
+                    'errors' => [],
+                ];
+            } catch (ValidationException $exception) {
+                $results[] = [
+                    'original_name' => $file->getClientOriginalName(),
+                    'import_id' => null,
+                    'status' => 'ERRO',
+                    'pendencias_count' => 0,
+                    'rows' => ['lista' => 0, 'parcelas' => 0, 'plano_interno' => 0],
+                    'errors' => $this->flattenValidationErrors($exception),
+                ];
+            } catch (\Throwable $exception) {
+                Log::error('Falha ao processar arquivo de importacao em lote.', [
+                    'original_name' => $file->getClientOriginalName(),
+                    'exception' => $exception->getMessage(),
+                ]);
+
+                $results[] = [
+                    'original_name' => $file->getClientOriginalName(),
+                    'import_id' => null,
+                    'status' => 'ERRO',
+                    'pendencias_count' => 0,
+                    'rows' => ['lista' => 0, 'parcelas' => 0, 'plano_interno' => 0],
+                    'errors' => ['Falha interna ao processar o arquivo.'],
+                ];
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * @param  array<int, string>|null  $requiredSheets
+     */
+    public function uploadAndParse(UploadedFile $file, ?array $requiredSheets = null): ConvenioImport
+    {
+        $requiredSheets = $this->normalizeRequiredSheets($requiredSheets);
         $disk = Storage::disk('private');
+        $arquivoPath = null;
+        $importId = null;
 
         try {
-            $disk->makeDirectory('imports/convenios');
-            $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-            $extension = $file->getClientOriginalExtension() ?: 'xlsx';
-            $safeBaseName = Str::of($originalName)->ascii()->replaceMatches('/[^A-Za-z0-9_-]+/', '_')->trim('_')->limit(70, '');
-            $fileName = sprintf('%s_%s.%s', now()->format('Ymd_His'), Str::random(12), strtolower((string) $extension));
-            if ((string) $safeBaseName !== '') {
-                $fileName = sprintf('%s_%s.%s', (string) $safeBaseName, Str::random(12), strtolower((string) $extension));
+            $this->validateXlsxFile($file);
+            $arquivoPath = $this->persistUploadedFile($disk, $file);
+
+            $absolutePath = $disk->path($arquivoPath);
+            $spreadsheet = IOFactory::load($absolutePath);
+            $expectedColumns = $this->expectedColumns();
+            $requiredHeaders = $this->expectedRequiredHeaders();
+            $parsedBySheet = [];
+
+            foreach (array_keys($expectedColumns) as $sheetName) {
+                $parsedBySheet[$sheetName] = $this->parseSheet(
+                    $spreadsheet,
+                    $sheetName,
+                    $expectedColumns[$sheetName],
+                    $requiredHeaders[$sheetName] ?? []
+                );
             }
 
-            $arquivoPath = $file->storeAs('imports/convenios', $fileName, 'private');
+            $sheetValidationErrors = $this->validateParsedSheets($parsedBySheet, $requiredSheets);
+            if ($sheetValidationErrors !== []) {
+                throw ValidationException::withMessages([
+                    'arquivo' => $sheetValidationErrors,
+                ]);
+            }
+
+            $import = DB::transaction(function () use ($file, $arquivoPath, $parsedBySheet, $requiredSheets): ConvenioImport {
+                $parsedLista = $parsedBySheet['lista'];
+                $parsedParcelas = $parsedBySheet['parcelas'];
+                $parsedPi = $parsedBySheet['plano_interno'];
+
+                $import = ConvenioImport::query()->create([
+                    'arquivo_nome' => $file->getClientOriginalName(),
+                    'arquivo_path' => $arquivoPath,
+                    'status' => 'uploaded',
+                ]);
+
+                $this->storeParsedRows($import, $parsedLista['rows'], $parsedParcelas['rows'], $parsedPi['rows']);
+
+                $totalIssues = $this->countIssueRows($parsedLista['rows'])
+                    + $this->countIssueRows($parsedParcelas['rows'])
+                    + $this->countIssueRows($parsedPi['rows']);
+
+                $import->update([
+                    'status' => 'parsed',
+                    'total_lista_rows' => count($parsedLista['rows']),
+                    'total_parcelas_rows' => count($parsedParcelas['rows']),
+                    'total_pi_rows' => count($parsedPi['rows']),
+                    'total_issues' => $totalIssues,
+                    'resumo' => [
+                        'required_sheets' => $requiredSheets,
+                        'sheets' => [
+                            'lista' => $this->buildSheetResumo($parsedLista),
+                            'parcelas' => $this->buildSheetResumo($parsedParcelas),
+                            'plano_interno' => $this->buildSheetResumo($parsedPi),
+                        ],
+                    ],
+                ]);
+
+                return $import->fresh();
+            });
+
+            $importId = $import->id;
+
+            return $import;
+        } catch (ValidationException $exception) {
+            $this->deleteStoredFileSafely($disk, $arquivoPath);
+
+            throw $exception;
         } catch (\Throwable $exception) {
-            Log::error('Falha ao salvar arquivo de importacao de convenios.', [
+            $this->deleteStoredFileSafely($disk, $arquivoPath);
+
+            Log::error('Falha ao salvar/processar arquivo de importacao de convenios.', [
+                'import_id' => $importId,
+                'original_name' => $file->getClientOriginalName(),
                 'disk' => 'private',
                 'disk_root' => config('filesystems.disks.private.root'),
                 'target_path' => storage_path('app/private/imports/convenios'),
                 'php_user' => get_current_user(),
                 'uid' => function_exists('posix_getuid') ? posix_getuid() : null,
                 'gid' => function_exists('posix_getgid') ? posix_getgid() : null,
+                'arquivo_path' => $arquivoPath,
                 'exception' => $exception->getMessage(),
             ]);
 
             throw $exception;
         }
+    }
 
-        $import = ConvenioImport::query()->create([
-            'arquivo_nome' => $file->getClientOriginalName(),
-            'arquivo_path' => $arquivoPath,
-            'status' => 'uploaded',
-        ]);
+    /**
+     * @param  array<int, string>|null  $requiredSheets
+     * @return array<int, string>
+     */
+    private function normalizeRequiredSheets(?array $requiredSheets): array
+    {
+        $requested = $requiredSheets ?? $this->requiredSheetsDefault();
+        $validSheets = array_keys($this->expectedColumns());
+        $normalized = array_values(array_filter($requested, fn (string $sheet): bool => in_array($sheet, $validSheets, true)));
 
-        $absolutePath = $disk->path($arquivoPath);
-        $spreadsheet = IOFactory::load($absolutePath);
+        return $normalized === [] ? $this->requiredSheetsDefault() : $normalized;
+    }
 
-        $parsedLista = $this->parseSheet($spreadsheet, 'lista', $this->expectedColumns()['lista']);
-        $parsedParcelas = $this->parseSheet($spreadsheet, 'parcelas', $this->expectedColumns()['parcelas']);
-        $parsedPi = $this->parseSheet($spreadsheet, 'plano_interno', $this->expectedColumns()['plano_interno']);
+    private function validateXlsxFile(UploadedFile $file): void
+    {
+        $extension = strtolower((string) ($file->getClientOriginalExtension() ?: $file->extension()));
+        $mime = strtolower((string) $file->getClientMimeType());
+        $allowedMimes = [
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/octet-stream',
+        ];
 
-        foreach ($parsedLista['rows'] as $row) {
+        if ($extension !== 'xlsx') {
+            throw ValidationException::withMessages([
+                'arquivo' => ['Formato inválido. Envie um arquivo .xlsx.'],
+            ]);
+        }
+
+        if (! in_array($mime, $allowedMimes, true)) {
+            throw ValidationException::withMessages([
+                'arquivo' => ['MIME inválido. O upload deve ser de uma planilha XLSX válida.'],
+            ]);
+        }
+    }
+
+    private function persistUploadedFile(mixed $disk, UploadedFile $file): string
+    {
+        $baseDirectory = sprintf('imports/convenios/%s', (string) Str::ulid());
+        $disk->makeDirectory($baseDirectory);
+
+        $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $safeBaseName = Str::of($originalName)
+            ->ascii()
+            ->replaceMatches('/[^A-Za-z0-9_-]+/', '_')
+            ->trim('_')
+            ->limit(70, '')
+            ->toString();
+        $fileName = sprintf('%s_%s.xlsx', $safeBaseName !== '' ? $safeBaseName : 'convenio_import', Str::random(12));
+        $stored = $file->storeAs($baseDirectory, $fileName, 'private');
+
+        if (! is_string($stored) || trim($stored) === '') {
+            throw new \RuntimeException('Falha ao persistir o arquivo de importacao no storage privado.');
+        }
+
+        return $stored;
+    }
+
+    private function deleteStoredFileSafely(mixed $disk, ?string $arquivoPath): void
+    {
+        if ($arquivoPath === null || trim($arquivoPath) === '') {
+            return;
+        }
+
+        try {
+            if ($disk->exists($arquivoPath)) {
+                $disk->delete($arquivoPath);
+            }
+        } catch (\Throwable $exception) {
+            Log::warning('Nao foi possivel limpar arquivo temporario apos falha de importacao.', [
+                'arquivo_path' => $arquivoPath,
+                'exception' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $listaRows
+     * @param  array<int, array<string, mixed>>  $parcelasRows
+     * @param  array<int, array<string, mixed>>  $piRows
+     */
+    private function storeParsedRows(ConvenioImport $import, array $listaRows, array $parcelasRows, array $piRows): void
+    {
+        foreach ($listaRows as $row) {
             ConvenioImportListaRow::query()->create([
                 'import_id' => $import->id,
                 'row_number' => $row['row_number'],
@@ -121,7 +355,7 @@ class ConvenioImportService
             ]);
         }
 
-        foreach ($parsedParcelas['rows'] as $row) {
+        foreach ($parcelasRows as $row) {
             ConvenioImportParcelaRow::query()->create([
                 'import_id' => $import->id,
                 'row_number' => $row['row_number'],
@@ -132,7 +366,7 @@ class ConvenioImportService
             ]);
         }
 
-        foreach ($parsedPi['rows'] as $row) {
+        foreach ($piRows as $row) {
             ConvenioImportPiRow::query()->create([
                 'import_id' => $import->id,
                 'row_number' => $row['row_number'],
@@ -142,36 +376,73 @@ class ConvenioImportService
                 'issues' => $row['issues'],
             ]);
         }
+    }
 
-        $totalIssues = $this->countIssueRows($parsedLista['rows'])
-            + $this->countIssueRows($parsedParcelas['rows'])
-            + $this->countIssueRows($parsedPi['rows']);
+    /**
+     * @param  array{sheet_found: bool, rows: array<int, array<string, mixed>>, sheet_title: string|null, missing_required_headers: array<int, string>}  $parsedSheet
+     * @return array{encontrada: bool, rows: int, titulo: string|null, headers_ausentes: array<int, string>}
+     */
+    private function buildSheetResumo(array $parsedSheet): array
+    {
+        return [
+            'encontrada' => $parsedSheet['sheet_found'],
+            'rows' => count($parsedSheet['rows']),
+            'titulo' => $parsedSheet['sheet_title'],
+            'headers_ausentes' => $parsedSheet['missing_required_headers'],
+        ];
+    }
 
-        $import->update([
-            'status' => 'parsed',
-            'total_lista_rows' => count($parsedLista['rows']),
-            'total_parcelas_rows' => count($parsedParcelas['rows']),
-            'total_pi_rows' => count($parsedPi['rows']),
-            'total_issues' => $totalIssues,
-            'resumo' => [
-                'sheets' => [
-                    'lista' => [
-                        'encontrada' => $parsedLista['sheet_found'],
-                        'rows' => count($parsedLista['rows']),
-                    ],
-                    'parcelas' => [
-                        'encontrada' => $parsedParcelas['sheet_found'],
-                        'rows' => count($parsedParcelas['rows']),
-                    ],
-                    'plano_interno' => [
-                        'encontrada' => $parsedPi['sheet_found'],
-                        'rows' => count($parsedPi['rows']),
-                    ],
-                ],
-            ],
-        ]);
+    /**
+     * @param  array<string, array{sheet_found: bool, rows: array<int, array<string, mixed>>, sheet_title: string|null, missing_required_headers: array<int, string>}>  $parsedBySheet
+     * @param  array<int, string>  $requiredSheets
+     * @return array<int, string>
+     */
+    private function validateParsedSheets(array $parsedBySheet, array $requiredSheets): array
+    {
+        $errors = [];
 
-        return $import->fresh();
+        foreach ($requiredSheets as $sheetName) {
+            if (($parsedBySheet[$sheetName]['sheet_found'] ?? false) === false) {
+                $aliases = $this->expectedSheetAliases()[$sheetName] ?? [$sheetName];
+                $errors[] = sprintf(
+                    'A aba "%s" nao foi encontrada. Nomes aceitos: %s.',
+                    $sheetName,
+                    implode(', ', $aliases)
+                );
+            }
+        }
+
+        foreach ($parsedBySheet as $sheetName => $parsedSheet) {
+            if (! $parsedSheet['sheet_found']) {
+                continue;
+            }
+
+            $missingHeaders = $parsedSheet['missing_required_headers'] ?? [];
+            if ($missingHeaders !== []) {
+                $errors[] = sprintf(
+                    'A aba "%s" nao contem os cabecalhos obrigatorios: %s.',
+                    $sheetName,
+                    implode(', ', $missingHeaders)
+                );
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function flattenValidationErrors(ValidationException $exception): array
+    {
+        $messages = [];
+        foreach ($exception->errors() as $errors) {
+            foreach ($errors as $message) {
+                $messages[] = (string) $message;
+            }
+        }
+
+        return $messages !== [] ? $messages : [$exception->getMessage()];
     }
 
     public function confirmImport(ConvenioImport $import, int $batchSize = 500): ConvenioImport
@@ -841,15 +1112,18 @@ class ConvenioImportService
 
     /**
      * @param  array<string, array<int, string>>  $expectedColumns
-     * @return array{sheet_found: bool, rows: array<int, array<string, mixed>>}
+     * @param  array<int, string>  $requiredHeaders
+     * @return array{sheet_found: bool, rows: array<int, array<string, mixed>>, sheet_title: string|null, missing_required_headers: array<int, string>}
      */
-    private function parseSheet(Spreadsheet $spreadsheet, string $sheetName, array $expectedColumns): array
+    private function parseSheet(Spreadsheet $spreadsheet, string $sheetName, array $expectedColumns, array $requiredHeaders = []): array
     {
         $sheet = $this->findSheet($spreadsheet, $sheetName);
         if (! $sheet) {
             return [
                 'sheet_found' => false,
                 'rows' => [],
+                'sheet_title' => null,
+                'missing_required_headers' => [],
             ];
         }
 
@@ -858,6 +1132,8 @@ class ConvenioImportService
             return [
                 'sheet_found' => true,
                 'rows' => [],
+                'sheet_title' => $sheet->getTitle(),
+                'missing_required_headers' => $requiredHeaders,
             ];
         }
 
@@ -869,6 +1145,13 @@ class ConvenioImportService
             $headerKey = $this->normalizeHeaderKey($value);
             if ($headerKey !== '') {
                 $headerMap[$headerKey] = $column;
+            }
+        }
+
+        $missingRequiredHeaders = [];
+        foreach ($requiredHeaders as $requiredHeader) {
+            if (! isset($headerMap[$this->normalizeHeaderKey($requiredHeader)])) {
+                $missingRequiredHeaders[] = $requiredHeader;
             }
         }
 
@@ -933,13 +1216,22 @@ class ConvenioImportService
         return [
             'sheet_found' => true,
             'rows' => $parsedRows,
+            'sheet_title' => $sheet->getTitle(),
+            'missing_required_headers' => $missingRequiredHeaders,
         ];
     }
 
     private function findSheet(Spreadsheet $spreadsheet, string $expectedName): mixed
     {
+        $normalizedAliases = [];
+        $aliases = $this->expectedSheetAliases()[$expectedName] ?? [$expectedName];
+        foreach ($aliases as $alias) {
+            $normalizedAliases[$this->normalizeHeaderKey($alias)] = true;
+        }
+
         foreach ($spreadsheet->getWorksheetIterator() as $sheet) {
-            if ($this->normalizeHeaderKey($sheet->getTitle()) === $this->normalizeHeaderKey($expectedName)) {
+            $normalizedTitle = $this->normalizeHeaderKey($sheet->getTitle());
+            if (isset($normalizedAliases[$normalizedTitle])) {
                 return $sheet;
             }
         }
