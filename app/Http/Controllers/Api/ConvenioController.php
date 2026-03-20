@@ -9,138 +9,29 @@ use App\Http\Resources\ConvenioResource;
 use App\Http\Resources\ParcelaResource;
 use App\Models\Convenio;
 use App\Models\ConvenioPlanoInterno;
+use App\Models\Parcela;
+use App\Services\ConvenioExportService;
 use App\Support\LatestMunicipioDemografia;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ConvenioController extends Controller
 {
+    public function __construct(private readonly ConvenioExportService $exportService)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'q' => ['nullable', 'string', 'max:255'],
-            'municipio_id' => ['nullable', 'integer'],
-            'orgao_id' => ['nullable', 'integer'],
-            'situacao_financeira' => ['nullable', 'string', 'in:EM_ABERTO,QUITADO'],
-            'com_parcelas_em_aberto' => ['nullable', 'boolean'],
-            'vigencia_de' => ['nullable', 'date_format:Y-m-d'],
-            'vigencia_ate' => ['nullable', 'date_format:Y-m-d'],
-            'data_pagamento_de' => ['nullable', 'date_format:Y-m-d'],
-            'data_pagamento_ate' => ['nullable', 'date_format:Y-m-d'],
-            'plano_interno' => ['nullable', 'string', 'max:64'],
-            'pi_codigo' => ['nullable', 'string', 'max:64'],
-            'pi' => ['nullable', 'array'],
-            'pi.*' => ['string', 'max:64'],
-            'numero_convenio' => ['nullable', 'string', 'max:255'],
-            'valor_total_min' => ['nullable', 'numeric', 'min:0'],
-            'valor_total_max' => ['nullable', 'numeric', 'min:0'],
-            'valor_em_aberto_min' => ['nullable', 'numeric', 'min:0'],
-            'valor_em_aberto_max' => ['nullable', 'numeric', 'min:0'],
-            'partido_id' => ['nullable', 'integer'],
-            'prefeito_primeiro_mandato' => ['nullable', 'boolean'],
-            'prefeito_segundo_mandato' => ['nullable', 'boolean'],
-            'orderBy' => ['nullable', 'string'],
-            'direction' => ['nullable', 'string', 'in:asc,desc'],
-            'sort' => ['nullable', 'string'],
-            'page' => ['nullable', 'integer', 'min:1'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
-            'with_trashed' => ['nullable', 'boolean'],
-            'only_trashed' => ['nullable', 'boolean'],
-        ]);
+        $validated = $this->validateIndexFilters($request);
 
         $query = $this->buildConvenioIndexQuery($request);
-
-        if (! empty($validated['q'])) {
-            $term = mb_strtolower(trim((string) $validated['q']));
-            $like = '%'.$term.'%';
-
-            $query->where(function ($nested) use ($like): void {
-                $nested->whereRaw('LOWER(COALESCE(convenio.numero_convenio, "")) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(COALESCE(convenio.objeto, "")) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(COALESCE(municipio_beneficiario.nome, "")) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(COALESCE(orgao_rel.sigla, "")) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(COALESCE(orgao_rel.nome, "")) LIKE ?', [$like])
-                    ->orWhereExists(function ($subquery) use ($like): void {
-                        $subquery->selectRaw('1')
-                            ->from('convenio_plano_interno as cp_q')
-                            ->whereColumn('cp_q.convenio_id', 'convenio.id')
-                            ->whereRaw('LOWER(cp_q.plano_interno) LIKE ?', [$like]);
-                    });
-            });
-        }
-
-        if (! empty($validated['municipio_id'])) {
-            $query->where('convenio.municipio_id', (int) $validated['municipio_id']);
-        }
-
-        if (! empty($validated['orgao_id'])) {
-            $query->where('convenio.orgao_id', (int) $validated['orgao_id']);
-        }
-
-        if (! empty($validated['numero_convenio'])) {
-            $query->where('convenio.numero_convenio', 'like', '%'.trim((string) $validated['numero_convenio']).'%');
-        }
-
-        if (($validated['com_parcelas_em_aberto'] ?? null) !== null) {
-            if ((bool) $validated['com_parcelas_em_aberto']) {
-                $query->comParcelasEmAberto();
-            } else {
-                $query->whereDoesntHave('parcelas', fn ($parcelaQuery) => $parcelaQuery->emAberto());
-            }
-        }
-
-        if (($validated['situacao_financeira'] ?? null) === 'EM_ABERTO') {
-            $query->comParcelasEmAberto();
-        } elseif (($validated['situacao_financeira'] ?? null) === 'QUITADO') {
-            $query->whereDoesntHave('parcelas', fn ($parcelaQuery) => $parcelaQuery->emAberto());
-        }
-
-        if (! empty($validated['vigencia_de'])) {
-            $query->where(function ($nested) use ($validated): void {
-                $nested->whereNull('convenio.data_fim')
-                    ->orWhereDate('convenio.data_fim', '>=', $validated['vigencia_de']);
-            });
-        }
-
-        if (! empty($validated['vigencia_ate'])) {
-            $query->where(function ($nested) use ($validated): void {
-                $nested->whereNull('convenio.data_inicio')
-                    ->orWhereDate('convenio.data_inicio', '<=', $validated['vigencia_ate']);
-            });
-        }
-
-        if (! empty($validated['data_pagamento_de']) || ! empty($validated['data_pagamento_ate'])) {
-            $query->whereHas('parcelas', function ($parcelaQuery) use ($validated): void {
-                if (! empty($validated['data_pagamento_de'])) {
-                    $parcelaQuery->whereDate('data_pagamento', '>=', $validated['data_pagamento_de']);
-                }
-                if (! empty($validated['data_pagamento_ate'])) {
-                    $parcelaQuery->whereDate('data_pagamento', '<=', $validated['data_pagamento_ate']);
-                }
-            });
-        }
-
-        $this->applyPlanoInternoFilters($query, $validated);
-        $this->applyMandatoFilters($query, $validated);
-
-        if (($validated['valor_total_min'] ?? null) !== null) {
-            $query->whereRaw('COALESCE(convenio.valor_total_calculado, convenio.valor_total_informado, 0) >= ?', [(float) $validated['valor_total_min']]);
-        }
-
-        if (($validated['valor_total_max'] ?? null) !== null) {
-            $query->whereRaw('COALESCE(convenio.valor_total_calculado, convenio.valor_total_informado, 0) <= ?', [(float) $validated['valor_total_max']]);
-        }
-
-        if (($validated['valor_em_aberto_min'] ?? null) !== null) {
-            $query->having('valor_em_aberto_total', '>=', (float) $validated['valor_em_aberto_min']);
-        }
-
-        if (($validated['valor_em_aberto_max'] ?? null) !== null) {
-            $query->having('valor_em_aberto_total', '<=', (float) $validated['valor_em_aberto_max']);
-        }
+        $this->applyIndexFilters($query, $validated);
 
         [$orderBy, $direction, $isRawSort] = $this->resolveSort($request);
         if ($isRawSort) {
@@ -150,7 +41,30 @@ class ConvenioController extends Controller
         }
         $query->orderBy('convenio.id');
 
-        $perPage = max(1, min((int) ($validated['per_page'] ?? 15), 200));
+        $perPage = max(0, min((int) ($validated['per_page'] ?? 15), 200));
+
+        if ($perPage === 0) {
+            $items = $query->get();
+            $total = $items->count();
+
+            return response()->json([
+                'sucesso' => true,
+                'data' => [
+                    'results' => ConvenioResource::collection($items)->resolve(),
+                    'pagination' => [
+                        'page' => 1,
+                        'perPage' => 0,
+                        'total' => $total,
+                        'lastPage' => 1,
+                    ],
+                    'meta' => [
+                        'orderBy' => $orderBy,
+                        'direction' => $direction,
+                    ],
+                ],
+            ]);
+        }
+
         $paginator = $query->paginate($perPage)->withQueryString();
 
         return response()->json([
@@ -169,6 +83,61 @@ class ConvenioController extends Controller
                 ],
             ],
         ]);
+    }
+
+    public function excelList(Request $request)
+    {
+        $validated = $this->validateIndexFilters($request);
+        $exportConfig = $request->validate([
+            'columns' => ['required', 'array', 'min:1'],
+            'columns.*' => ['string', Rule::in([
+                'orgao',
+                'municipio',
+                'numero_convenio',
+                'objeto',
+                'parcelas_total',
+                'parcelas_pagas',
+                'valor_total',
+                'valor_pago',
+                'valor_em_aberto',
+                'planos_internos',
+                'situacao_financeira',
+                'convenente_nome',
+            ])],
+            'expand_open_parcelas' => ['nullable', 'boolean'],
+            'open_parcelas_limit' => ['nullable', 'integer', 'min:1', 'max:12'],
+        ]);
+        $query = $this->buildConvenioIndexQuery($request);
+        $this->applyIndexFilters($query, $validated);
+
+        if ($request->boolean('expand_open_parcelas')) {
+            $query->with([
+                'parcelas' => fn ($parcelaQuery) => $parcelaQuery
+                    ->emAberto()
+                    ->orderBy('numero'),
+            ]);
+        }
+
+        [$orderBy, $direction, $isRawSort] = $this->resolveSort($request);
+        if ($isRawSort) {
+            $query->orderByRaw(sprintf('%s %s', $orderBy, $direction));
+        } else {
+            $query->orderBy($orderBy, $direction);
+        }
+        $query->orderBy('convenio.id');
+
+        return $this->exportService->downloadConveniosList(
+            $query->get(),
+            array_filter([
+                'Busca' => $validated['q'] ?? null,
+                'Município' => $validated['municipio_id'] ?? null,
+                'Órgão' => $validated['orgao_id'] ?? null,
+                'Situação financeira' => $validated['situacao_financeira'] ?? null,
+                'PI' => $validated['pi_codigo'] ?? ($validated['plano_interno'] ?? null),
+                'Número do convênio' => $validated['numero_convenio'] ?? null,
+            ], fn ($value) => $value !== null && $value !== ''),
+            $exportConfig
+        );
     }
 
     public function filtros(Request $request): JsonResponse
@@ -228,10 +197,16 @@ class ConvenioController extends Controller
     {
         $validated = $request->validated();
         $planosInternos = $this->extractPlanosInternos($validated);
-        unset($validated['plano_interno'], $validated['planos_internos']);
+        $parcelas = $validated['parcelas'] ?? null;
+        unset($validated['plano_interno'], $validated['planos_internos'], $validated['parcelas']);
 
-        $convenio = Convenio::query()->create($validated);
-        $this->syncPlanosInternos($convenio, $planosInternos);
+        $convenio = DB::transaction(function () use ($validated, $planosInternos, $parcelas): Convenio {
+            $convenio = Convenio::query()->create($validated);
+            $this->syncPlanosInternos($convenio, $planosInternos);
+            $this->syncParcelas($convenio, $parcelas);
+
+            return $convenio;
+        });
 
         $convenio->load(['orgao', 'municipio.regiaoIntegracao', 'planosInternos']);
         $convenio->loadAggregate('parcelas', 'id', 'count');
@@ -342,11 +317,15 @@ class ConvenioController extends Controller
     {
         $validated = $request->validated();
         $planosInternos = $this->extractPlanosInternos($validated);
-        unset($validated['plano_interno'], $validated['planos_internos']);
+        $parcelas = $validated['parcelas'] ?? null;
+        unset($validated['plano_interno'], $validated['planos_internos'], $validated['parcelas']);
 
-        $convenio->fill($validated);
-        $convenio->save();
-        $this->syncPlanosInternos($convenio, $planosInternos);
+        DB::transaction(function () use ($validated, $planosInternos, $parcelas, $convenio): void {
+            $convenio->fill($validated);
+            $convenio->save();
+            $this->syncPlanosInternos($convenio, $planosInternos);
+            $this->syncParcelas($convenio, $parcelas);
+        });
 
         $convenio->load(['orgao', 'municipio.regiaoIntegracao', 'planosInternos']);
         $convenio->loadAggregate('parcelas', 'id', 'count');
@@ -412,12 +391,7 @@ class ConvenioController extends Controller
 
     public function pdf(int $convenio)
     {
-        $convenioModel = Convenio::query()
-            ->with(['orgao', 'municipio.regiaoIntegracao', 'planosInternos'])
-            ->withTrashed()
-            ->whereKey($convenio)
-            ->withParcelasAgg()
-            ->firstOrFail();
+        $convenioModel = $this->loadConvenioForDocument($convenio);
 
         $parcelas = $convenioModel->parcelas()
             ->orderBy('numero')
@@ -498,6 +472,118 @@ class ConvenioController extends Controller
         $query->withParcelasAgg();
 
         return $query;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validateIndexFilters(Request $request): array
+    {
+        return $request->validate([
+            'q' => ['nullable', 'string', 'max:255'],
+            'municipio_id' => ['nullable', 'integer', 'exists:municipio,id'],
+            'orgao_id' => ['nullable', 'integer', 'exists:orgao,id'],
+            'situacao_financeira' => ['nullable', 'string', 'in:EM_ABERTO,QUITADO'],
+            'vigencia_de' => ['nullable', 'date_format:Y-m-d'],
+            'vigencia_ate' => ['nullable', 'date_format:Y-m-d'],
+            'data_pagamento_de' => ['nullable', 'date_format:Y-m-d'],
+            'data_pagamento_ate' => ['nullable', 'date_format:Y-m-d'],
+            'plano_interno' => ['nullable', 'string', 'max:32'],
+            'pi_codigo' => ['nullable', 'string', 'max:32'],
+            'pi' => ['nullable', 'array'],
+            'pi.*' => ['string', 'max:32'],
+            'numero_convenio' => ['nullable', 'string', 'max:255'],
+            'com_parcelas_em_aberto' => ['nullable', 'boolean'],
+            'partido_id' => ['nullable', 'integer', 'exists:partido,id'],
+            'prefeito_primeiro_mandato' => ['nullable', 'boolean'],
+            'prefeito_segundo_mandato' => ['nullable', 'boolean'],
+            'valor_total_min' => ['nullable', 'numeric', 'min:0'],
+            'valor_total_max' => ['nullable', 'numeric', 'min:0'],
+            'valor_em_aberto_min' => ['nullable', 'numeric', 'min:0'],
+            'valor_em_aberto_max' => ['nullable', 'numeric', 'min:0'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:0', 'max:200'],
+            'orderBy' => ['nullable', 'string', 'max:50'],
+            'direction' => ['nullable', 'string', 'in:asc,desc'],
+            'sort' => ['nullable', 'string', 'max:80'],
+            'with_trashed' => ['nullable', 'boolean'],
+            'only_trashed' => ['nullable', 'boolean'],
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function applyIndexFilters($query, array $validated): void
+    {
+        if (! empty($validated['q'])) {
+            $like = '%'.mb_strtolower(trim((string) $validated['q'])).'%';
+
+            $query->where(function ($nested) use ($like): void {
+                $nested->whereRaw('LOWER(COALESCE(convenio.numero_convenio, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(convenio.convenente_nome, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(convenio.objeto, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(municipio_beneficiario.nome, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(orgao_rel.sigla, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(orgao_rel.nome, "")) LIKE ?', [$like]);
+            });
+        }
+
+        if (! empty($validated['municipio_id'])) {
+            $query->where('convenio.municipio_id', (int) $validated['municipio_id']);
+        }
+
+        if (! empty($validated['orgao_id'])) {
+            $query->where('convenio.orgao_id', (int) $validated['orgao_id']);
+        }
+
+        if (! empty($validated['numero_convenio'])) {
+            $query->where('convenio.numero_convenio', 'like', '%'.trim((string) $validated['numero_convenio']).'%');
+        }
+
+        if (($validated['situacao_financeira'] ?? null) === 'EM_ABERTO' || ($validated['com_parcelas_em_aberto'] ?? null) === true) {
+            $query->comParcelasEmAberto();
+        } elseif (($validated['situacao_financeira'] ?? null) === 'QUITADO' || ($validated['com_parcelas_em_aberto'] ?? null) === false) {
+            $query->semParcelasEmAberto();
+        }
+
+        if (! empty($validated['vigencia_de'])) {
+            $query->whereDate('convenio.data_fim', '>=', $validated['vigencia_de']);
+        }
+
+        if (! empty($validated['vigencia_ate'])) {
+            $query->whereDate('convenio.data_inicio', '<=', $validated['vigencia_ate']);
+        }
+
+        if (! empty($validated['data_pagamento_de']) || ! empty($validated['data_pagamento_ate'])) {
+            $query->whereHas('parcelas', function ($parcelaQuery) use ($validated): void {
+                if (! empty($validated['data_pagamento_de'])) {
+                    $parcelaQuery->whereDate('data_pagamento', '>=', $validated['data_pagamento_de']);
+                }
+                if (! empty($validated['data_pagamento_ate'])) {
+                    $parcelaQuery->whereDate('data_pagamento', '<=', $validated['data_pagamento_ate']);
+                }
+            });
+        }
+
+        $this->applyPlanoInternoFilters($query, $validated);
+        $this->applyMandatoFilters($query, $validated);
+
+        if (array_key_exists('valor_total_min', $validated) && $validated['valor_total_min'] !== null) {
+            $query->whereRaw('COALESCE(convenio.valor_total_calculado, convenio.valor_total_informado, 0) >= ?', [(float) $validated['valor_total_min']]);
+        }
+
+        if (array_key_exists('valor_total_max', $validated) && $validated['valor_total_max'] !== null) {
+            $query->whereRaw('COALESCE(convenio.valor_total_calculado, convenio.valor_total_informado, 0) <= ?', [(float) $validated['valor_total_max']]);
+        }
+
+        if (array_key_exists('valor_em_aberto_min', $validated) && $validated['valor_em_aberto_min'] !== null) {
+            $query->havingRaw('valor_em_aberto_total >= ?', [(float) $validated['valor_em_aberto_min']]);
+        }
+
+        if (array_key_exists('valor_em_aberto_max', $validated) && $validated['valor_em_aberto_max'] !== null) {
+            $query->havingRaw('valor_em_aberto_total <= ?', [(float) $validated['valor_em_aberto_max']]);
+        }
     }
 
     /**
@@ -694,5 +780,163 @@ class ConvenioController extends Controller
         )->all();
 
         ConvenioPlanoInterno::query()->insert($payload);
+    }
+
+    private function loadConvenioForDocument(int $convenio): Convenio
+    {
+        return Convenio::query()
+            ->select('convenio.*')
+            ->with([
+                'orgao',
+                'municipio.regiaoIntegracao',
+                'planosInternos',
+            ])
+            ->withTrashed()
+            ->withParcelasAgg()
+            ->findOrFail($convenio);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $parcelas
+     */
+    private function syncParcelas(Convenio $convenio, ?array $parcelas): void
+    {
+        if ($parcelas === null) {
+            return;
+        }
+
+        $existingParcelas = $convenio->parcelas()->withTrashed()->get()->keyBy('id');
+        $seenNumeros = [];
+
+        foreach ($parcelas as $index => $payload) {
+            $delete = (bool) ($payload['delete'] ?? false);
+            $parcelaId = isset($payload['id']) && $payload['id'] !== null ? (int) $payload['id'] : null;
+            $attributes = $this->normalizeParcelaPayload($payload);
+
+            if ($delete) {
+                if ($parcelaId !== null && $existingParcelas->has($parcelaId)) {
+                    $parcela = $existingParcelas->get($parcelaId);
+                    if (! $parcela->trashed()) {
+                        $parcela->delete();
+                    }
+                }
+                continue;
+            }
+
+            if (! array_key_exists('numero', $attributes) || $attributes['numero'] === null) {
+                throw ValidationException::withMessages([
+                    sprintf('parcelas.%d.numero', $index) => 'Informe o número da parcela.',
+                ]);
+            }
+
+            $numero = (int) $attributes['numero'];
+            if (in_array($numero, $seenNumeros, true)) {
+                throw ValidationException::withMessages([
+                    sprintf('parcelas.%d.numero', $index) => 'Não é permitido repetir o número da parcela no mesmo convênio.',
+                ]);
+            }
+            $seenNumeros[] = $numero;
+
+            $attributes['convenio_id'] = $convenio->id;
+            $attributes['situacao'] = $this->resolveParcelaSituacao($attributes);
+
+            if ($parcelaId !== null) {
+                $parcela = $existingParcelas->get($parcelaId);
+                if (! $parcela || (int) $parcela->convenio_id !== (int) $convenio->id) {
+                    throw ValidationException::withMessages([
+                        sprintf('parcelas.%d.id', $index) => 'A parcela informada não pertence a este convênio.',
+                    ]);
+                }
+
+                $duplicateQuery = Parcela::query()
+                    ->where('convenio_id', $convenio->id)
+                    ->where('numero', $numero)
+                    ->whereKeyNot($parcela->id)
+                    ->whereNull('deleted_at');
+
+                if ($duplicateQuery->exists()) {
+                    throw ValidationException::withMessages([
+                        sprintf('parcelas.%d.numero', $index) => 'Já existe uma parcela ativa com esse número para o convênio.',
+                    ]);
+                }
+
+                $parcela->fill($attributes);
+                $parcela->save();
+
+                if ($parcela->trashed()) {
+                    $parcela->restore();
+                }
+
+                continue;
+            }
+
+            $duplicateQuery = Parcela::query()
+                ->where('convenio_id', $convenio->id)
+                ->where('numero', $numero)
+                ->whereNull('deleted_at');
+
+            if ($duplicateQuery->exists()) {
+                throw ValidationException::withMessages([
+                    sprintf('parcelas.%d.numero', $index) => 'Já existe uma parcela ativa com esse número para o convênio.',
+                ]);
+            }
+
+            Parcela::query()->create($attributes);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function normalizeParcelaPayload(array $payload): array
+    {
+        $allowed = [
+            'numero',
+            'valor_previsto',
+            'valor_pago',
+            'data_pagamento',
+            'nota_empenho',
+            'data_ne',
+            'valor_empenhado',
+            'situacao',
+            'observacoes',
+        ];
+
+        $attributes = [];
+        foreach ($allowed as $field) {
+            if (! array_key_exists($field, $payload)) {
+                continue;
+            }
+
+            $value = $payload[$field];
+            if ($value === '') {
+                $value = null;
+            }
+
+            $attributes[$field] = $value;
+        }
+
+        return $attributes;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function resolveParcelaSituacao(array $attributes): string
+    {
+        $situacao = strtoupper(trim((string) ($attributes['situacao'] ?? '')));
+        if (in_array($situacao, ['PREVISTA', 'PAGA', 'CANCELADA'], true)) {
+            return $situacao;
+        }
+
+        $valorPrevisto = (float) ($attributes['valor_previsto'] ?? 0);
+        $valorPago = (float) ($attributes['valor_pago'] ?? 0);
+
+        if ($valorPrevisto > 0 && $valorPago >= $valorPrevisto) {
+            return 'PAGA';
+        }
+
+        return 'PREVISTA';
     }
 }

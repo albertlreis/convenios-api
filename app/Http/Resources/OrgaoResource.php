@@ -14,6 +14,8 @@ class OrgaoResource extends JsonResource
             'sigla' => $this->sigla,
             'nome' => $this->nome,
             'codigo_sigplan' => $this->codigo_sigplan,
+            'convenios_vinculados_count' => (int) ($this->convenios_vinculados_count ?? 0),
+            'pode_excluir' => (int) ($this->convenios_vinculados_count ?? 0) === 0,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
             'deleted_at' => $this->deleted_at?->format('Y-m-d H:i:s'),

@@ -7,6 +7,7 @@ use App\Http\Requests\StoreOrgaoRequest;
 use App\Http\Requests\UpdateOrgaoRequest;
 use App\Http\Resources\OrgaoResource;
 use App\Models\Orgao;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,9 +15,12 @@ class OrgaoController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage = max(1, min((int) $request->query('per_page', 15), 200));
+        $perPage = max(0, min((int) $request->query('per_page', 15), 200));
 
-        $query = Orgao::query();
+        $query = Orgao::query()
+            ->withCount([
+                'convenios as convenios_vinculados_count' => fn (Builder $conveniosQuery) => $conveniosQuery->withTrashed(),
+            ]);
 
         if ($request->boolean('only_trashed')) {
             $query->onlyTrashed();
@@ -24,8 +28,27 @@ class OrgaoController extends Controller
             $query->withTrashed();
         }
 
+        $query->orderBy('sigla');
+
+        if ($perPage === 0) {
+            $items = $query->get();
+            $total = $items->count();
+
+            return response()->json([
+                'sucesso' => true,
+                'data' => [
+                    'results' => OrgaoResource::collection($items)->resolve(),
+                    'pagination' => [
+                        'page' => 1,
+                        'perPage' => 0,
+                        'total' => $total,
+                        'lastPage' => 1,
+                    ],
+                ],
+            ]);
+        }
+
         $orgaos = $query
-            ->orderBy('sigla')
             ->paginate($perPage)
             ->withQueryString();
 
@@ -43,6 +66,9 @@ class OrgaoController extends Controller
     {
         $orgao = Orgao::query()
             ->withTrashed()
+            ->withCount([
+                'convenios as convenios_vinculados_count' => fn (Builder $conveniosQuery) => $conveniosQuery->withTrashed(),
+            ])
             ->whereKey($orgao)
             ->firstOrFail();
         $orgao->load('convenios');
@@ -60,6 +86,12 @@ class OrgaoController extends Controller
 
     public function destroy(Orgao $orgao): JsonResponse
     {
+        if ($orgao->convenios()->withTrashed()->exists()) {
+            return response()->json([
+                'message' => 'Este órgão possui convênios vinculados e não pode ser excluído.',
+            ], 409);
+        }
+
         $orgao->delete();
 
         return response()->json(status: 204);

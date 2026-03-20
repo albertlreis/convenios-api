@@ -27,7 +27,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->statefulApi();
+        $middleware->alias([
+            'auth.active' => \App\Http\Middleware\EnsureActiveUser::class,
+            'password.changed' => \App\Http\Middleware\EnsurePasswordChangeCompleted::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

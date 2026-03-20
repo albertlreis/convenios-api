@@ -49,6 +49,7 @@ class ConvenioImportService
                 'convenente' => ['convenente'],
                 'numero_convenio' => ['numero_convenio'],
                 'ano' => ['ano'],
+                'plano_interno' => ['plano_interno'],
                 'objeto' => ['objeto'],
                 'grupo_despesa' => ['grupo_despesa'],
                 'data_inicio' => ['data_inicio'],
@@ -56,6 +57,8 @@ class ConvenioImportService
                 'valor_total' => ['valor_total'],
                 'valor_orgao' => ['valor_orgao'],
                 'valor_contrapartida' => ['valor_contrapartida'],
+                'quantidade_parcelas' => ['quantidade_parcelas'],
+                'valor_aditivo' => ['valor_aditivo', 'aditivo'],
             ],
 
             // ✅ IMPORTANTE: parcelas NÃO tem coluna orgao; ela existe apenas na aba lista.
@@ -264,6 +267,39 @@ class ConvenioImportService
 
     /**
      * @param  array<int, string>|null  $requiredSheets
+     * @return array<string, array<string, mixed>>
+     */
+    public function inspectWorkbookPath(string $absolutePath, ?array $requiredSheets = null): array
+    {
+        if (! is_file($absolutePath)) {
+            throw ValidationException::withMessages([
+                'arquivo' => [sprintf('Arquivo não encontrado para inspeção: %s', $absolutePath)],
+            ]);
+        }
+
+        $requiredSheets = $this->normalizeRequiredSheets($requiredSheets);
+        $spreadsheet = IOFactory::load($absolutePath);
+        $expectedColumns = $this->expectedColumns();
+        $requiredHeaders = $this->expectedRequiredHeaders();
+        $summary = [];
+
+        foreach (array_keys($expectedColumns) as $sheetName) {
+            $parsedSheet = $this->parseSheet(
+                $spreadsheet,
+                $sheetName,
+                $expectedColumns[$sheetName],
+                $requiredHeaders[$sheetName] ?? []
+            );
+
+            $summary[$sheetName] = $this->buildSheetResumo($parsedSheet);
+            $summary[$sheetName]['required'] = in_array($sheetName, $requiredSheets, true);
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @param  array<int, string>|null  $requiredSheets
      * @return array<int, string>
      */
     private function normalizeRequiredSheets(?array $requiredSheets): array
@@ -379,8 +415,28 @@ class ConvenioImportService
     }
 
     /**
-     * @param  array{sheet_found: bool, rows: array<int, array<string, mixed>>, sheet_title: string|null, missing_required_headers: array<int, string>}  $parsedSheet
-     * @return array{encontrada: bool, rows: int, titulo: string|null, headers_ausentes: array<int, string>}
+     * @param  array{
+     *     sheet_found: bool,
+     *     rows: array<int, array<string, mixed>>,
+     *     sheet_title: string|null,
+     *     missing_required_headers: array<int, string>,
+     *     raw_headers: array<int, string>,
+     *     normalized_headers: array<int, string>,
+     *     duplicate_headers: array<int, string>,
+     *     matched_headers: array<string, string>,
+     *     unmapped_headers: array<int, string>
+     * }  $parsedSheet
+     * @return array{
+     *     encontrada: bool,
+     *     rows: int,
+     *     titulo: string|null,
+     *     headers_ausentes: array<int, string>,
+     *     headers_brutos: array<int, string>,
+     *     headers_normalizados: array<int, string>,
+     *     headers_duplicados: array<int, string>,
+     *     headers_mapeados: array<string, string>,
+     *     headers_sem_destino: array<int, string>
+     * }
      */
     private function buildSheetResumo(array $parsedSheet): array
     {
@@ -389,6 +445,11 @@ class ConvenioImportService
             'rows' => count($parsedSheet['rows']),
             'titulo' => $parsedSheet['sheet_title'],
             'headers_ausentes' => $parsedSheet['missing_required_headers'],
+            'headers_brutos' => $parsedSheet['raw_headers'],
+            'headers_normalizados' => $parsedSheet['normalized_headers'],
+            'headers_duplicados' => $parsedSheet['duplicate_headers'],
+            'headers_mapeados' => $parsedSheet['matched_headers'],
+            'headers_sem_destino' => $parsedSheet['unmapped_headers'],
         ];
     }
 
@@ -447,25 +508,26 @@ class ConvenioImportService
 
     public function confirmImport(ConvenioImport $import, int $batchSize = 500): ConvenioImport
     {
-        $import->update(['status' => 'processing']);
-        $import->pendingItems()->delete();
+        return DB::transaction(function () use ($import, $batchSize): ConvenioImport {
+            $import->update(['status' => 'processing']);
+            $import->pendingItems()->delete();
 
-        $counters = [
-            'processados' => 0,
-            'pendencias' => 0,
-            'parcelas_status' => [
-                'total' => 0,
-                'paga' => 0,
-                'em_aberto' => 0,
-                'desconhecido' => 0,
-                'desconhecidos_top' => [],
-            ],
-        ];
+            $counters = [
+                'processados' => 0,
+                'pendencias' => 0,
+                'parcelas_status' => [
+                    'total' => 0,
+                    'paga' => 0,
+                    'em_aberto' => 0,
+                    'desconhecido' => 0,
+                    'desconhecidos_top' => [],
+                ],
+            ];
 
-        // ✅ Cache principal: a “chave de ligação” entre abas é numero_convenio
-        $convenioIdByNumero = [];      // [numero_convenio => convenio_id]
-        $orgaoIdByNumero = [];         // [numero_convenio => orgao_id] (para detectar conflito)
-        $numeroConvenioAmbiguo = [];   // [numero_convenio => true] quando houver conflito
+            // ✅ Cache principal: a “chave de ligação” entre abas é numero_convenio
+            $convenioIdByNumero = [];      // [numero_convenio => convenio_id]
+            $orgaoIdByNumero = [];         // [numero_convenio => orgao_id] (para detectar conflito)
+            $numeroConvenioAmbiguo = [];   // [numero_convenio => true] quando houver conflito
 
         ConvenioImportListaRow::query()
             ->where('import_id', $import->id)
@@ -540,6 +602,7 @@ class ConvenioImportService
                         'valor_total_calculado' => $this->normalizeDecimal($data['valor_total'] ?? null),
                         'valor_orgao' => $this->normalizeDecimal($data['valor_orgao'] ?? null),
                         'valor_contrapartida' => $this->normalizeDecimal($data['valor_contrapartida'] ?? null),
+                        'valor_aditivo' => $this->normalizeDecimal($data['valor_aditivo'] ?? null),
                         'dados_origem' => [
                             'import_id' => $import->id,
                             'sheet' => 'lista',
@@ -745,47 +808,49 @@ class ConvenioImportService
                 }
             }, 'id');
 
-        $totalIssues = $import->listaRows()->whereJsonLength('issues', '>', 0)->count()
-            + $import->parcelasRows()->whereJsonLength('issues', '>', 0)->count()
-            + $import->piRows()->whereJsonLength('issues', '>', 0)->count()
-            + $import->pendingItems()->count();
+            $totalIssues = $import->listaRows()->whereJsonLength('issues', '>', 0)->count()
+                + $import->parcelasRows()->whereJsonLength('issues', '>', 0)->count()
+                + $import->piRows()->whereJsonLength('issues', '>', 0)->count()
+                + $import->pendingItems()->count();
 
-        $import->update([
-            'status' => 'confirmed',
-            'confirmado_em' => now(),
-            'total_processados' => $counters['processados'],
-            'total_pendencias' => $import->pendingItems()->count(),
-            'total_issues' => $totalIssues,
-            'resumo' => array_merge($import->resumo ?? [], [
-                'confirmacao' => [
-                    'processados' => $counters['processados'],
-                    'pendencias' => $import->pendingItems()->count(),
-                ],
-                'parcelas_status' => [
-                    'total' => $counters['parcelas_status']['total'],
-                    'paga' => $counters['parcelas_status']['paga'],
-                    'em_aberto' => $counters['parcelas_status']['em_aberto'],
-                    'desconhecido' => $counters['parcelas_status']['desconhecido'],
-                    'top_20_status_desconhecidos' => $this->topStatusDesconhecidos($counters['parcelas_status']['desconhecidos_top']),
-                ],
-            ]),
-        ]);
+            $import->update([
+                'status' => 'confirmed',
+                'confirmado_em' => now(),
+                'total_processados' => $counters['processados'],
+                'total_pendencias' => $import->pendingItems()->count(),
+                'total_issues' => $totalIssues,
+                'resumo' => array_merge($import->resumo ?? [], [
+                    'confirmacao' => [
+                        'processados' => $counters['processados'],
+                        'pendencias' => $import->pendingItems()->count(),
+                    ],
+                    'parcelas_status' => [
+                        'total' => $counters['parcelas_status']['total'],
+                        'paga' => $counters['parcelas_status']['paga'],
+                        'em_aberto' => $counters['parcelas_status']['em_aberto'],
+                        'desconhecido' => $counters['parcelas_status']['desconhecido'],
+                        'top_20_status_desconhecidos' => $this->topStatusDesconhecidos($counters['parcelas_status']['desconhecidos_top']),
+                    ],
+                ]),
+            ]);
 
-        return $import->fresh();
+            return $import->fresh();
+        });
     }
 
     public function confirmPlanoInternoPorOrgao(ConvenioImport $import, bool $sync = true, int $batchSize = 500): ConvenioImport
     {
-        $import->update(['status' => 'processing']);
-        $import->pendingItems()->delete();
+        return DB::transaction(function () use ($import, $sync, $batchSize): ConvenioImport {
+            $import->update(['status' => 'processing']);
+            $import->pendingItems()->delete();
 
-        $validRowsByKey = [];
-        $desiredPisByKey = [];
-        $validSiglas = [];
-        $orgaosNaoEncontrados = [];
-        $processados = 0;
-        $piUpsertRowsTotal = 0;
-        $piRemovidosTotal = 0;
+            $validRowsByKey = [];
+            $desiredPisByKey = [];
+            $validSiglas = [];
+            $orgaosNaoEncontrados = [];
+            $processados = 0;
+            $piUpsertRowsTotal = 0;
+            $piRemovidosTotal = 0;
 
         ConvenioImportPiRow::query()
             ->where('import_id', $import->id)
@@ -1016,57 +1081,58 @@ class ConvenioImportService
             $conveniosResolvidos[$key] = true;
         }
 
-        $totalPendencias = $import->pendingItems()->count();
-        $conveniosNaoEncontradosLista = array_values(array_unique(array_values($conveniosNaoEncontradosMap)));
-        sort($conveniosNaoEncontradosLista);
+            $totalPendencias = $import->pendingItems()->count();
+            $conveniosNaoEncontradosLista = array_values(array_unique(array_values($conveniosNaoEncontradosMap)));
+            sort($conveniosNaoEncontradosLista);
 
-        $conveniosNaoEncontradosPorOrgaoResumo = [];
-        foreach ($conveniosNaoEncontradosPorOrgao as $sigla => $numeros) {
-            $conveniosNaoEncontradosPorOrgaoResumo[$sigla] = count($numeros);
-        }
+            $conveniosNaoEncontradosPorOrgaoResumo = [];
+            foreach ($conveniosNaoEncontradosPorOrgao as $sigla => $numeros) {
+                $conveniosNaoEncontradosPorOrgaoResumo[$sigla] = count($numeros);
+            }
 
-        $resumoFinal = array_merge($import->resumo ?? [], [
-            'tipo' => 'plano_interno_por_orgao',
-            'convenios_nao_encontrados_total' => count($conveniosNaoEncontradosMap),
-            'convenios_nao_encontrados_lista' => array_slice($conveniosNaoEncontradosLista, 0, 50),
-            'convenios_nao_encontrados_por_orgao' => $conveniosNaoEncontradosPorOrgaoResumo,
-            'confirmacao_pi_por_orgao' => [
-                'sync_solicitado' => $sync,
-                'sync_executado' => $sync && ! $multipleOrgaos,
-                'sync_ignorado_motivo' => $sync && $multipleOrgaos ? 'orgao_multiplo_na_planilha' : null,
-                'linhas_processadas' => $processados,
-                'pendencias' => $totalPendencias,
-                'convenios_tocados_total' => count($desiredPisByKey),
-                'convenios_resolvidos_total' => count($conveniosResolvidos),
-                'pi_upsert_rows_total' => $piUpsertRowsTotal,
-                'pi_removidos_total' => $piRemovidosTotal,
-                'orgaos_nao_encontrados_total' => count($orgaosNaoEncontrados),
-                'orgaos_validos_na_planilha' => array_values(array_keys($validSiglas)),
+            $resumoFinal = array_merge($import->resumo ?? [], [
+                'tipo' => 'plano_interno_por_orgao',
                 'convenios_nao_encontrados_total' => count($conveniosNaoEncontradosMap),
                 'convenios_nao_encontrados_lista' => array_slice($conveniosNaoEncontradosLista, 0, 50),
                 'convenios_nao_encontrados_por_orgao' => $conveniosNaoEncontradosPorOrgaoResumo,
-                'convenios_excluidos_total' => count($conveniosExcluidos),
-                'convenios_duplicados_excluidos_total' => count($conveniosDuplicadosExcluidos),
-                'pendencias_resolucao_convenio_total' => $pendenciasExtras,
-            ],
-        ]);
+                'confirmacao_pi_por_orgao' => [
+                    'sync_solicitado' => $sync,
+                    'sync_executado' => $sync && ! $multipleOrgaos,
+                    'sync_ignorado_motivo' => $sync && $multipleOrgaos ? 'orgao_multiplo_na_planilha' : null,
+                    'linhas_processadas' => $processados,
+                    'pendencias' => $totalPendencias,
+                    'convenios_tocados_total' => count($desiredPisByKey),
+                    'convenios_resolvidos_total' => count($conveniosResolvidos),
+                    'pi_upsert_rows_total' => $piUpsertRowsTotal,
+                    'pi_removidos_total' => $piRemovidosTotal,
+                    'orgaos_nao_encontrados_total' => count($orgaosNaoEncontrados),
+                    'orgaos_validos_na_planilha' => array_values(array_keys($validSiglas)),
+                    'convenios_nao_encontrados_total' => count($conveniosNaoEncontradosMap),
+                    'convenios_nao_encontrados_lista' => array_slice($conveniosNaoEncontradosLista, 0, 50),
+                    'convenios_nao_encontrados_por_orgao' => $conveniosNaoEncontradosPorOrgaoResumo,
+                    'convenios_excluidos_total' => count($conveniosExcluidos),
+                    'convenios_duplicados_excluidos_total' => count($conveniosDuplicadosExcluidos),
+                    'pendencias_resolucao_convenio_total' => $pendenciasExtras,
+                ],
+            ]);
 
-        Log::info('Importacao PI por orgao confirmada.', [
-            'import_id' => $import->id,
-            'convenios_nao_encontrados_total' => count($conveniosNaoEncontradosMap),
-            'resumo' => $resumoFinal['confirmacao_pi_por_orgao'] ?? [],
-        ]);
+            Log::info('Importacao PI por orgao confirmada.', [
+                'import_id' => $import->id,
+                'convenios_nao_encontrados_total' => count($conveniosNaoEncontradosMap),
+                'resumo' => $resumoFinal['confirmacao_pi_por_orgao'] ?? [],
+            ]);
 
-        $import->update([
-            'status' => 'confirmed',
-            'confirmado_em' => now(),
-            'total_processados' => $processados,
-            'total_pendencias' => $totalPendencias,
-            'total_issues' => $import->piRows()->whereJsonLength('issues', '>', 0)->count() + $totalPendencias,
-            'resumo' => $resumoFinal,
-        ]);
+            $import->update([
+                'status' => 'confirmed',
+                'confirmado_em' => now(),
+                'total_processados' => $processados,
+                'total_pendencias' => $totalPendencias,
+                'total_issues' => $import->piRows()->whereJsonLength('issues', '>', 0)->count() + $totalPendencias,
+                'resumo' => $resumoFinal,
+            ]);
 
-        return $import->fresh();
+            return $import->fresh();
+        });
     }
 
     /**
@@ -1113,7 +1179,17 @@ class ConvenioImportService
     /**
      * @param  array<string, array<int, string>>  $expectedColumns
      * @param  array<int, string>  $requiredHeaders
-     * @return array{sheet_found: bool, rows: array<int, array<string, mixed>>, sheet_title: string|null, missing_required_headers: array<int, string>}
+     * @return array{
+     *     sheet_found: bool,
+     *     rows: array<int, array<string, mixed>>,
+     *     sheet_title: string|null,
+     *     missing_required_headers: array<int, string>,
+     *     raw_headers: array<int, string>,
+     *     normalized_headers: array<int, string>,
+     *     duplicate_headers: array<int, string>,
+     *     matched_headers: array<string, string>,
+     *     unmapped_headers: array<int, string>
+     * }
      */
     private function parseSheet(Spreadsheet $spreadsheet, string $sheetName, array $expectedColumns, array $requiredHeaders = []): array
     {
@@ -1124,6 +1200,11 @@ class ConvenioImportService
                 'rows' => [],
                 'sheet_title' => null,
                 'missing_required_headers' => [],
+                'raw_headers' => [],
+                'normalized_headers' => [],
+                'duplicate_headers' => [],
+                'matched_headers' => [],
+                'unmapped_headers' => [],
             ];
         }
 
@@ -1134,17 +1215,50 @@ class ConvenioImportService
                 'rows' => [],
                 'sheet_title' => $sheet->getTitle(),
                 'missing_required_headers' => $requiredHeaders,
+                'raw_headers' => [],
+                'normalized_headers' => [],
+                'duplicate_headers' => [],
+                'matched_headers' => [],
+                'unmapped_headers' => [],
             ];
         }
 
         $header = array_shift($rows);
         $headerMap = [];
         $rawHeaderNames = [];
+        $normalizedHeaders = [];
+        $duplicateHeaders = [];
         foreach ($header as $column => $value) {
             $rawHeaderNames[$column] = trim((string) $value);
             $headerKey = $this->normalizeHeaderKey($value);
             if ($headerKey !== '') {
+                $normalizedHeaders[$column] = $headerKey;
+                if (isset($headerMap[$headerKey])) {
+                    $duplicateHeaders[] = $rawHeaderNames[$column];
+                }
                 $headerMap[$headerKey] = $column;
+            }
+        }
+
+        $matchedHeaders = [];
+        $recognizedHeaders = [];
+        foreach ($expectedColumns as $targetField => $aliases) {
+            foreach ($aliases as $alias) {
+                $headerKey = $this->normalizeHeaderKey($alias);
+                if (! isset($headerMap[$headerKey])) {
+                    continue;
+                }
+
+                $matchedHeaders[$targetField] = $rawHeaderNames[$headerMap[$headerKey]] ?? $alias;
+                $recognizedHeaders[$headerKey] = true;
+                break;
+            }
+        }
+
+        $unmappedHeaders = [];
+        foreach ($headerMap as $headerKey => $column) {
+            if (! isset($recognizedHeaders[$headerKey])) {
+                $unmappedHeaders[] = $rawHeaderNames[$column] ?? $headerKey;
             }
         }
 
@@ -1180,18 +1294,6 @@ class ConvenioImportService
                 $normalizedData[$targetField] = $this->normalizeValue($targetField, $value, $issues);
             }
 
-            if ($sheetName === 'lista' && $this->rowHasValueForAliases($row, $headerMap, ['plano_interno'])) {
-                $normalizedData['plano_interno'] = null;
-                $normalizedData['ignored_columns'] = array_merge($normalizedData['ignored_columns'] ?? [], [
-                    'plano_interno' => true,
-                ]);
-                $issues[] = [
-                    'type' => 'ignored_column',
-                    'field' => 'plano_interno',
-                    'message' => 'Coluna plano_interno da aba lista foi ignorada (PI vem da aba plano_interno).',
-                ];
-            }
-
             if (in_array($sheetName, ['lista', 'parcelas', 'plano_interno'], true) && $normalizedData['numero_convenio'] === null) {
                 $issues[] = 'numero_convenio_ausente';
             }
@@ -1218,6 +1320,11 @@ class ConvenioImportService
             'rows' => $parsedRows,
             'sheet_title' => $sheet->getTitle(),
             'missing_required_headers' => $missingRequiredHeaders,
+            'raw_headers' => array_values(array_filter($rawHeaderNames, fn (?string $header): bool => $header !== null && trim($header) !== '')),
+            'normalized_headers' => array_values($normalizedHeaders),
+            'duplicate_headers' => array_values(array_unique($duplicateHeaders)),
+            'matched_headers' => $matchedHeaders,
+            'unmapped_headers' => array_values(array_unique($unmappedHeaders)),
         ];
     }
 
@@ -1274,35 +1381,13 @@ class ConvenioImportService
     }
 
     /**
-     * @param  array<string, mixed>  $row
-     * @param  array<string, string>  $headerMap
-     * @param  array<int, string>  $aliases
-     */
-    private function rowHasValueForAliases(array $row, array $headerMap, array $aliases): bool
-    {
-        foreach ($aliases as $alias) {
-            $headerKey = $this->normalizeHeaderKey($alias);
-            if (! isset($headerMap[$headerKey])) {
-                continue;
-            }
-
-            $value = $row[$headerMap[$headerKey]] ?? null;
-            if ($this->normalizeString($value) !== null) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
      * @param  array<int, string|array<string, string>>  $issues
      */
     private function normalizeValue(string $field, mixed $value, array &$issues): mixed
     {
         return match ($field) {
             'ano', 'numero_parcela', 'quantidade_parcelas' => $this->normalizeInteger($value),
-            'valor_total', 'valor_orgao', 'valor_contrapartida', 'valor_previsto', 'valor_pago' => $this->normalizeDecimal($value),
+            'valor_total', 'valor_orgao', 'valor_contrapartida', 'valor_previsto', 'valor_pago', 'valor_aditivo' => $this->normalizeDecimal($value),
             'data_inicio', 'data_fim', 'data_pagamento' => $this->normalizeDate($value, $issues, $field),
             default => $this->normalizeString($value),
         };
@@ -1449,7 +1534,30 @@ class ConvenioImportService
             return null;
         }
 
-        return Orgao::query()->whereRaw('UPPER(sigla) = ?', [$sigla])->first();
+        $porSigla = Orgao::query()->whereRaw('UPPER(sigla) = ?', [$sigla])->first();
+        if ($porSigla !== null) {
+            return $porSigla;
+        }
+
+        $porNomeExato = Orgao::query()->whereRaw('LOWER(nome) = ?', [mb_strtolower($valor)])->first();
+        if ($porNomeExato !== null) {
+            return $porNomeExato;
+        }
+
+        $normalized = TextNormalizer::normalizeForMatch($valor);
+        if ($normalized === null) {
+            return null;
+        }
+
+        $matches = Orgao::query()
+            ->get(['id', 'nome', 'sigla'])
+            ->filter(function (Orgao $orgao) use ($normalized): bool {
+                return TextNormalizer::normalizeForMatch($orgao->nome) === $normalized
+                    || TextNormalizer::normalizeForMatch($orgao->sigla) === $normalized;
+            })
+            ->values();
+
+        return $matches->count() === 1 ? $matches->first() : null;
     }
 
     private function resolveMunicipio(?string $nome, ?string $codigoIbge): ?Municipio

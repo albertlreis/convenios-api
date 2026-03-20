@@ -33,6 +33,18 @@ class StoreConvenioRequest extends ApiFormRequest
             'valor_total_informado' => ['nullable', 'numeric', 'min:0'],
             'valor_total_calculado' => ['nullable', 'numeric', 'min:0'],
             'dados_origem' => ['nullable', 'array'],
+            'parcelas' => ['nullable', 'array'],
+            'parcelas.*.id' => ['nullable', 'integer'],
+            'parcelas.*.delete' => ['nullable', 'boolean'],
+            'parcelas.*.numero' => ['nullable', 'integer', 'min:1'],
+            'parcelas.*.valor_previsto' => ['nullable', 'numeric', 'min:0'],
+            'parcelas.*.valor_pago' => ['nullable', 'numeric', 'min:0'],
+            'parcelas.*.data_pagamento' => ['nullable', 'date_format:Y-m-d'],
+            'parcelas.*.nota_empenho' => ['nullable', 'string', 'max:50'],
+            'parcelas.*.data_ne' => ['nullable', 'date_format:Y-m-d'],
+            'parcelas.*.valor_empenhado' => ['nullable', 'numeric', 'min:0'],
+            'parcelas.*.situacao' => ['nullable', Rule::in(['PREVISTA', 'PAGA', 'CANCELADA'])],
+            'parcelas.*.observacoes' => ['nullable', 'string'],
         ];
     }
 }

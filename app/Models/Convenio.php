@@ -37,6 +37,13 @@ class Convenio extends Model
         return $query->whereHas('parcelas', fn (Builder $parcelaQuery) => $parcelaQuery->emAberto());
     }
 
+    public function scopeSemParcelasEmAberto(Builder $query): Builder
+    {
+        return $query
+            ->whereHas('parcelas')
+            ->whereDoesntHave('parcelas', fn (Builder $parcelaQuery) => $parcelaQuery->emAberto());
+    }
+
     public function scopeWithParcelasAgg(Builder $query): Builder
     {
         if (empty($query->getQuery()->columns)) {

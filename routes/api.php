@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConvenioController;
 use App\Http\Controllers\Api\ConvenioIndicadoresController;
 use App\Http\Controllers\Api\ConvenioImportController;
@@ -14,68 +15,94 @@ use App\Http\Controllers\Api\OrgaoController;
 use App\Http\Controllers\Api\ParcelaController;
 use App\Http\Controllers\Api\PartidoController;
 use App\Http\Controllers\Api\PrefeitoController;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
     Route::get('health', fn () => ['status' => 'ok']);
 
-    Route::get('imports/convenios', [ConvenioImportController::class, 'index']);
-    Route::post('imports/convenios/upload', [ConvenioImportController::class, 'upload']);
-    Route::post('imports/convenios/upload-pi', [ConvenioImportController::class, 'uploadPi']);
-    Route::post('imports/convenios/confirm', [ConvenioImportController::class, 'confirm']);
-    Route::post('imports/convenios/{import}/confirm-pi', [ConvenioImportController::class, 'confirmPi']);
-    Route::get('imports/convenios/{id}', [ConvenioImportController::class, 'show']);
+    Route::post('auth/login', [AuthController::class, 'login']);
 
-    Route::get('convenios/indicadores/quantidade-com-parcelas-em-aberto', [ConvenioIndicadoresController::class, 'quantidadeComParcelasEmAberto']);
-    Route::get('convenios/indicadores/valores-em-aberto', [ConvenioIndicadoresController::class, 'valoresEmAberto']);
-    Route::get('convenios/indicadores/populacao-atendida', [ConvenioIndicadoresController::class, 'populacaoAtendida']);
-    Route::get('convenios/indicadores/eleitores-atendidos', [ConvenioIndicadoresController::class, 'eleitoresAtendidos']);
+    // Endpoints públicos usados pelo portal.
+    Route::get('convenios', [ConvenioController::class, 'index']);
     Route::get('convenios/filtros', [ConvenioController::class, 'filtros']);
-    Route::get('convenios/{convenio}/parcelas', [ConvenioController::class, 'parcelas']);
-    Route::get('convenios/{convenio}/parcelas-em-aberto', [ConvenioController::class, 'parcelasEmAberto']);
-    Route::get('convenios/{convenio}/financeiro', [FinanceiroController::class, 'showByConvenio']);
-    Route::get('convenios/{convenio}/pdf', [ConvenioController::class, 'pdf']);
-    Route::match(['post', 'patch'], 'convenios/{convenio}/restore', [ConvenioController::class, 'restore']);
-    Route::apiResource('convenios', ConvenioController::class)->parameters([
-        'convenios' => 'convenio',
-    ]);
+    Route::get('convenios/{convenio}', [ConvenioController::class, 'show']);
 
-    Route::patch('parcelas/{parcela}/pagamento', [ParcelaController::class, 'patchPagamento']);
-    Route::match(['post', 'patch'], 'parcelas/{parcela}/restore', [ParcelaController::class, 'restore']);
-    Route::apiResource('parcelas', ParcelaController::class)->parameters([
-        'parcelas' => 'parcela',
-    ]);
+    Route::middleware(['auth:sanctum', 'auth.active'])->group(function (): void {
+        Route::get('auth/me', [AuthController::class, 'me']);
+        Route::post('auth/logout', [AuthController::class, 'logout']);
+        Route::post('auth/change-password', [AuthController::class, 'changePassword']);
 
-    Route::get('municipios/indicadores/populacao-por-regiao', [MunicipioIndicadoresController::class, 'populacaoPorRegiao']);
-    Route::get('municipios/indicadores/eleitores-por-regiao', [MunicipioIndicadoresController::class, 'eleitoresPorRegiao']);
-    Route::apiResource('municipios', MunicipioController::class)->parameters([
-        'municipios' => 'municipio',
-    ]);
-    Route::apiResource('municipio-demografias', MunicipioDemografiaController::class)->parameters([
-        'municipio-demografias' => 'municipioDemografia',
-    ]);
+        Route::middleware('password.changed')->group(function (): void {
+            Route::get('imports/convenios', [ConvenioImportController::class, 'index']);
+            Route::post('imports/convenios/upload', [ConvenioImportController::class, 'upload']);
+            Route::post('imports/convenios/upload-pi', [ConvenioImportController::class, 'uploadPi']);
+            Route::post('imports/convenios/confirm', [ConvenioImportController::class, 'confirm']);
+            Route::post('imports/convenios/{import}/confirm-pi', [ConvenioImportController::class, 'confirmPi']);
+            Route::get('imports/convenios/{id}', [ConvenioImportController::class, 'show']);
 
-    Route::match(['post', 'patch'], 'orgaos/{orgao}/restore', [OrgaoController::class, 'restore']);
-    Route::apiResource('orgaos', OrgaoController::class)->parameters([
-        'orgaos' => 'orgao',
-    ]);
-    Route::apiResource('prefeitos', PrefeitoController::class)->parameters([
-        'prefeitos' => 'prefeito',
-    ]);
-    Route::apiResource('mandatos', MandatoController::class)->parameters([
-        'mandatos' => 'mandato',
-    ]);
-    Route::apiResource('partidos', PartidoController::class)->parameters([
-        'partidos' => 'partido',
-    ]);
+            Route::get('convenios/indicadores/quantidade-com-parcelas-em-aberto', [ConvenioIndicadoresController::class, 'quantidadeComParcelasEmAberto']);
+            Route::get('convenios/indicadores/valores-em-aberto', [ConvenioIndicadoresController::class, 'valoresEmAberto']);
+            Route::get('convenios/indicadores/home', [ConvenioIndicadoresController::class, 'home']);
+            Route::get('convenios/indicadores/populacao-atendida', [ConvenioIndicadoresController::class, 'populacaoAtendida']);
+            Route::get('convenios/indicadores/eleitores-atendidos', [ConvenioIndicadoresController::class, 'eleitoresAtendidos']);
+            Route::get('convenios/export/excel', [ConvenioController::class, 'excelList']);
+            Route::get('convenios/{convenio}/parcelas', [ConvenioController::class, 'parcelas']);
+            Route::get('convenios/{convenio}/parcelas-em-aberto', [ConvenioController::class, 'parcelasEmAberto']);
+            Route::get('convenios/{convenio}/financeiro', [FinanceiroController::class, 'showByConvenio']);
+            Route::get('convenios/{convenio}/pdf', [ConvenioController::class, 'pdf']);
+            Route::match(['post', 'patch'], 'convenios/{convenio}/restore', [ConvenioController::class, 'restore']);
+            Route::apiResource('convenios', ConvenioController::class)
+                ->except(['index', 'show'])
+                ->parameters([
+                    'convenios' => 'convenio',
+                ]);
 
-    Route::get('demografia', [DemografiaController::class, 'index']);
-    Route::get('demografia/lookups', [DemografiaController::class, 'lookups']);
-    Route::get('demografia/municipios/{municipioId}', [DemografiaController::class, 'showMunicipio']);
+            Route::patch('parcelas/{parcela}/pagamento', [ParcelaController::class, 'patchPagamento']);
+            Route::match(['post', 'patch'], 'parcelas/{parcela}/restore', [ParcelaController::class, 'restore']);
+            Route::apiResource('parcelas', ParcelaController::class)->parameters([
+                'parcelas' => 'parcela',
+            ]);
 
-    Route::get('eleitoral', [EleitoralController::class, 'index']);
-    Route::get('eleitoral/lookups', [EleitoralController::class, 'lookups']);
-    Route::get('eleitoral/municipios/{municipioId}', [EleitoralController::class, 'showMunicipio']);
+            Route::get('municipios/indicadores/populacao-por-regiao', [MunicipioIndicadoresController::class, 'populacaoPorRegiao']);
+            Route::get('municipios/indicadores/eleitores-por-regiao', [MunicipioIndicadoresController::class, 'eleitoresPorRegiao']);
+            Route::apiResource('municipios', MunicipioController::class)->parameters([
+                'municipios' => 'municipio',
+            ]);
+            Route::apiResource('municipio-demografias', MunicipioDemografiaController::class)->parameters([
+                'municipio-demografias' => 'municipioDemografia',
+            ]);
 
-    Route::get('financeiro/pi/{pi}', [FinanceiroController::class, 'showByPi']);
+            Route::match(['post', 'patch'], 'orgaos/{orgao}/restore', [OrgaoController::class, 'restore']);
+            Route::apiResource('orgaos', OrgaoController::class)->parameters([
+                'orgaos' => 'orgao',
+            ]);
+            Route::apiResource('prefeitos', PrefeitoController::class)->parameters([
+                'prefeitos' => 'prefeito',
+            ]);
+            Route::apiResource('mandatos', MandatoController::class)->parameters([
+                'mandatos' => 'mandato',
+            ]);
+            Route::apiResource('partidos', PartidoController::class)->parameters([
+                'partidos' => 'partido',
+            ]);
+
+            Route::get('demografia', [DemografiaController::class, 'index']);
+            Route::get('demografia/lookups', [DemografiaController::class, 'lookups']);
+            Route::get('demografia/municipios/{municipioId}', [DemografiaController::class, 'showMunicipio']);
+
+            Route::get('eleitoral', [EleitoralController::class, 'index']);
+            Route::get('eleitoral/lookups', [EleitoralController::class, 'lookups']);
+            Route::get('eleitoral/municipios/{municipioId}', [EleitoralController::class, 'showMunicipio']);
+
+            Route::get('financeiro/pi/{pi}', [FinanceiroController::class, 'showByPi']);
+
+            Route::patch('users/{user}/status', [UserController::class, 'updateStatus']);
+            Route::patch('users/{user}/password', [UserController::class, 'resetPassword']);
+            Route::match(['post', 'patch'], 'users/{user}/restore', [UserController::class, 'restore']);
+            Route::apiResource('users', UserController::class)->parameters([
+                'users' => 'user',
+            ]);
+        });
+    });
 });
