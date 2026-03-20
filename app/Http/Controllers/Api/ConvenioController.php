@@ -97,6 +97,8 @@ class ConvenioController extends Controller
                 'objeto',
                 'parcelas_total',
                 'parcelas_pagas',
+                'valor_orgao',
+                'valor_contrapartida',
                 'valor_total',
                 'valor_pago',
                 'valor_em_aberto',

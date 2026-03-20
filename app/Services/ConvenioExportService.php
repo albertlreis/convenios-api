@@ -7,7 +7,9 @@ use App\Models\Parcela;
 use Illuminate\Support\Collection;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -23,13 +25,14 @@ class ConvenioExportService
         $items = $convenios instanceof Collection ? $convenios->values() : collect($convenios)->values();
         $columns = $this->normalizeColumns($config['columns'] ?? []);
         $expandOpenParcelas = (bool) ($config['expand_open_parcelas'] ?? false);
-        $openParcelasLimit = $expandOpenParcelas ? max(1, (int) ($config['open_parcelas_limit'] ?? 1)) : 0;
+        $openParcelasLimit = $expandOpenParcelas ? max(1, (int) ($config['open_parcelas_limit'] ?? 10)) : 0;
 
         $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Convenios');
 
-        $headers = $this->headersForColumns($columns, $openParcelasLimit);
+        $columnStyles = $this->columnStylesForSelection($columns, $openParcelasLimit);
+        $headers = array_column($columnStyles, 'label');
         $sheet->fromArray([$headers], null, 'A1');
 
         foreach ($items as $index => $convenio) {
@@ -41,20 +44,7 @@ class ConvenioExportService
             );
         }
 
-        $this->styleSheet($sheet, count($headers));
-
-        if ($context !== []) {
-            $filtersSheet = $spreadsheet->createSheet();
-            $filtersSheet->setTitle('Filtros');
-            $filtersSheet->fromArray([['Filtro', 'Valor']], null, 'A1');
-            $row = 2;
-            foreach ($context as $label => $value) {
-                $filtersSheet->setCellValue("A{$row}", $label);
-                $filtersSheet->setCellValue("B{$row}", is_array($value) ? implode(', ', $value) : (string) $value);
-                $row++;
-            }
-            $this->styleSheet($filtersSheet, 2);
-        }
+        $this->styleSheet($sheet, $columnStyles);
 
         return $this->downloadSpreadsheet($spreadsheet, 'convenios-filtrados.xlsx');
     }
@@ -63,23 +53,30 @@ class ConvenioExportService
      * @param  array<int, string>  $columns
      * @return array<int, string>
      */
-    private function headersForColumns(array $columns, int $openParcelasLimit): array
+    private function columnStylesForSelection(array $columns, int $openParcelasLimit): array
     {
-        $headers = [];
+        $columnStyles = [];
+        $definitions = $this->columnDefinitions();
+
         foreach ($columns as $column) {
-            $headers[] = $this->columnDefinitions()[$column]['label'];
+            $columnStyles[] = [
+                'label' => $definitions[$column]['label'],
+                'format' => $definitions[$column]['format'] ?? null,
+                'width' => $definitions[$column]['width'] ?? null,
+                'wrap' => $definitions[$column]['wrap'] ?? false,
+            ];
         }
 
         for ($index = 1; $index <= $openParcelasLimit; $index++) {
-            $headers[] = "Parcela em aberto {$index} - número";
-            $headers[] = "Parcela em aberto {$index} - valor previsto";
-            $headers[] = "Parcela em aberto {$index} - valor pago";
-            $headers[] = "Parcela em aberto {$index} - data pagamento";
-            $headers[] = "Parcela em aberto {$index} - situação";
-            $headers[] = "Parcela em aberto {$index} - observações";
+            $columnStyles[] = [
+                'label' => sprintf('Parcela %02d', $index),
+                'format' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
+                'width' => 16,
+                'wrap' => false,
+            ];
         }
 
-        return $headers;
+        return $columnStyles;
     }
 
     /**
@@ -96,17 +93,14 @@ class ConvenioExportService
         }
 
         if ($openParcelasLimit > 0) {
-            $parcelasEmAberto = $this->openParcelasForConvenio($convenio)->take($openParcelasLimit)->values();
+            $parcelasEmAberto = $this->openParcelasForConvenio($convenio)
+                ->filter(fn (Parcela $parcela) => $parcela->numero !== null && (int) $parcela->numero > 0)
+                ->keyBy(fn (Parcela $parcela) => (int) $parcela->numero);
 
-            for ($index = 0; $index < $openParcelasLimit; $index++) {
+            for ($index = 1; $index <= $openParcelasLimit; $index++) {
                 /** @var Parcela|null $parcela */
                 $parcela = $parcelasEmAberto->get($index);
-                $row[] = $parcela?->numero;
-                $row[] = $parcela ? $this->decimal($parcela->valor_previsto) : null;
-                $row[] = $parcela ? $this->decimal($parcela->valor_pago) : null;
-                $row[] = optional($parcela?->data_pagamento)->format('Y-m-d');
-                $row[] = $parcela?->situacao;
-                $row[] = $parcela?->observacoes;
+                $row[] = $parcela ? $this->parcelaOpenValue($parcela) : 0;
             }
         }
 
@@ -114,7 +108,13 @@ class ConvenioExportService
     }
 
     /**
-     * @return array<string, array{label: string, resolver: \Closure(Convenio): scalar|null}>
+     * @return array<string, array{
+     *     label: string,
+     *     resolver: \Closure(Convenio): scalar|null,
+     *     format?: string|null,
+     *     width?: float|int|null,
+     *     wrap?: bool
+     * }>
      */
     private function columnDefinitions(): array
     {
@@ -122,50 +122,80 @@ class ConvenioExportService
             'orgao' => [
                 'label' => 'Órgão',
                 'resolver' => fn (Convenio $convenio) => $convenio->orgao?->sigla ?: $convenio->orgao?->nome,
+                'width' => 18,
             ],
             'municipio' => [
                 'label' => 'Município',
                 'resolver' => fn (Convenio $convenio) => $convenio->municipio?->nome,
+                'width' => 24,
             ],
             'numero_convenio' => [
                 'label' => 'Nº Conv',
                 'resolver' => fn (Convenio $convenio) => $convenio->numero_convenio,
+                'width' => 16,
             ],
             'objeto' => [
                 'label' => 'Objeto',
                 'resolver' => fn (Convenio $convenio) => $convenio->objeto,
+                'width' => 60,
+                'wrap' => true,
             ],
             'parcelas_total' => [
                 'label' => 'Parcelas',
                 'resolver' => fn (Convenio $convenio) => (int) ($convenio->parcelas_total ?? 0),
+                'format' => '0',
+                'width' => 12,
             ],
             'parcelas_pagas' => [
                 'label' => 'Parcelas pagas',
                 'resolver' => fn (Convenio $convenio) => (int) ($convenio->parcelas_pagas ?? 0),
+                'format' => '0',
+                'width' => 14,
+            ],
+            'valor_orgao' => [
+                'label' => 'Valor total',
+                'resolver' => fn (Convenio $convenio) => $this->valorOrgao($convenio),
+                'format' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
+                'width' => 16,
+            ],
+            'valor_contrapartida' => [
+                'label' => 'Contrapartida',
+                'resolver' => fn (Convenio $convenio) => $this->toFloat($convenio->valor_contrapartida ?? 0),
+                'format' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
+                'width' => 16,
             ],
             'valor_total' => [
-                'label' => 'Total convênio',
-                'resolver' => fn (Convenio $convenio) => $this->decimal($convenio->valor_total_calculado ?? $convenio->valor_total_informado ?? 0),
+                'label' => 'Valor global',
+                'resolver' => fn (Convenio $convenio) => $this->valorGlobal($convenio),
+                'format' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
+                'width' => 16,
             ],
             'valor_pago' => [
                 'label' => 'Total pago',
-                'resolver' => fn (Convenio $convenio) => $this->decimal($convenio->valor_pago_total ?? 0),
+                'resolver' => fn (Convenio $convenio) => $this->toFloat($convenio->valor_pago_total ?? 0),
+                'format' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
+                'width' => 16,
             ],
             'valor_em_aberto' => [
                 'label' => 'Total aberto',
-                'resolver' => fn (Convenio $convenio) => $this->decimal($convenio->valor_em_aberto_total ?? 0),
+                'resolver' => fn (Convenio $convenio) => $this->toFloat($convenio->valor_em_aberto_total ?? 0),
+                'format' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
+                'width' => 16,
             ],
             'planos_internos' => [
                 'label' => 'PI',
                 'resolver' => fn (Convenio $convenio) => $convenio->planosInternos->pluck('plano_interno')->implode(', '),
+                'width' => 24,
             ],
             'situacao_financeira' => [
                 'label' => 'Situação financeira',
                 'resolver' => fn (Convenio $convenio) => ((int) ($convenio->parcelas_em_aberto ?? 0)) > 0 ? 'Com parcelas em aberto' : 'Encerrado',
+                'width' => 20,
             ],
             'convenente_nome' => [
                 'label' => 'Convenente',
                 'resolver' => fn (Convenio $convenio) => $convenio->convenente_nome,
+                'width' => 28,
             ],
         ];
     }
@@ -197,7 +227,7 @@ class ConvenioExportService
             'objeto',
             'parcelas_total',
             'parcelas_pagas',
-            'valor_total',
+            'valor_orgao',
             'valor_pago',
             'valor_em_aberto',
         ];
@@ -221,23 +251,87 @@ class ConvenioExportService
             ->get();
     }
 
-    private function decimal(mixed $value): string
+    private function toFloat(mixed $value): float
     {
-        return number_format((float) $value, 2, '.', '');
+        return round((float) $value, 2);
     }
 
-    private function styleSheet($sheet, int $columnCount): void
+    private function valorOrgao(Convenio $convenio): float
     {
+        return $this->toFloat(
+            $convenio->valor_total_calculado
+            ?? $convenio->valor_total_informado
+            ?? $convenio->valor_orgao
+            ?? 0
+        );
+    }
+
+    private function valorGlobal(Convenio $convenio): float
+    {
+        return $this->toFloat(
+            $this->valorOrgao($convenio) + $this->toFloat($convenio->valor_contrapartida ?? 0)
+        );
+    }
+
+    private function parcelaOpenValue(Parcela $parcela): float
+    {
+        $valorPrevisto = (float) ($parcela->valor_previsto ?? 0);
+        $valorPago = (float) ($parcela->valor_pago ?? 0);
+
+        return $this->toFloat(max(0, $valorPrevisto - $valorPago));
+    }
+
+    /**
+     * @param  array<int, array{label: string, format?: string|null, width?: float|int|null, wrap?: bool}>  $columnStyles
+     */
+    private function styleSheet($sheet, array $columnStyles): void
+    {
+        $columnCount = count($columnStyles);
         $lastColumn = Coordinate::stringFromColumnIndex($columnCount);
+        $highestRow = $sheet->getHighestRow();
 
         $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true);
         $sheet->getStyle("A1:{$lastColumn}1")->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()
             ->setARGB('FFEFF3F8');
+        $sheet->getStyle("A1:{$lastColumn}{$highestRow}")->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
 
-        for ($index = 1; $index <= $columnCount; $index++) {
-            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($index))->setAutoSize(true);
+        $hasWrappedColumn = false;
+
+        foreach ($columnStyles as $index => $columnStyle) {
+            $columnLetter = Coordinate::stringFromColumnIndex($index + 1);
+            $dimension = $sheet->getColumnDimension($columnLetter);
+
+            if (! empty($columnStyle['width'])) {
+                $dimension->setAutoSize(false);
+                $dimension->setWidth((float) $columnStyle['width']);
+            } else {
+                $dimension->setAutoSize(true);
+            }
+
+            if ($highestRow < 2) {
+                continue;
+            }
+
+            if (! empty($columnStyle['format'])) {
+                $sheet->getStyle("{$columnLetter}2:{$columnLetter}{$highestRow}")
+                    ->getNumberFormat()
+                    ->setFormatCode($columnStyle['format']);
+            }
+
+            if (! empty($columnStyle['wrap'])) {
+                $sheet->getStyle("{$columnLetter}2:{$columnLetter}{$highestRow}")
+                    ->getAlignment()
+                    ->setWrapText(true);
+                $hasWrappedColumn = true;
+            }
+        }
+
+        if ($hasWrappedColumn && $highestRow >= 2) {
+            for ($row = 2; $row <= $highestRow; $row++) {
+                $sheet->getRowDimension($row)->setRowHeight(-1);
+            }
         }
     }
 

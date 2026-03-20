@@ -85,7 +85,7 @@ class ConvenioIndicadoresController extends Controller
             ->selectRaw('COALESCE(SUM(CASE WHEN convenios_agg.parcelas_em_aberto > 0 THEN 1 ELSE 0 END), 0) as convenios_com_parcelas_em_aberto')
             ->selectRaw('COALESCE(SUM(convenios_agg.valor_em_aberto_total), 0) as valor_em_aberto_total')
             ->selectRaw('COALESCE(SUM(convenios_agg.valor_previsto_total), 0) as valor_previsto_total')
-            ->selectRaw('COALESCE(SUM(convenios_agg.valor_pago_total), 0) as valor_pago_total')
+            ->selectRaw('COALESCE(SUM(CASE WHEN convenios_agg.parcelas_em_aberto > 0 THEN convenios_agg.valor_pago_total ELSE 0 END), 0) as valor_pago_total')
             ->first();
     }
 }
