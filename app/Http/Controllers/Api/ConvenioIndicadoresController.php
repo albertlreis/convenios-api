@@ -18,6 +18,7 @@ class ConvenioIndicadoresController extends Controller
         return [
             'convenios_encerrados' => (int) ($totais->convenios_encerrados ?? 0),
             'convenios_com_parcelas_em_aberto' => (int) ($totais->convenios_com_parcelas_em_aberto ?? 0),
+            'valor_total_convenio' => number_format((float) ($totais->valor_total_convenio ?? 0), 2, '.', ''),
             'valor_pago_total' => number_format((float) ($totais->valor_pago_total ?? 0), 2, '.', ''),
             'valor_em_aberto_total' => number_format((float) ($totais->valor_em_aberto_total ?? 0), 2, '.', ''),
         ];
@@ -76,13 +77,14 @@ class ConvenioIndicadoresController extends Controller
     private function totaisConvenios(): object
     {
         $subquery = Convenio::query()
-            ->select(['convenio.id'])
+            ->select(['convenio.id', 'convenio.valor_orgao'])
             ->withParcelasAgg();
 
         return DB::query()
             ->fromSub($subquery, 'convenios_agg')
             ->selectRaw('COALESCE(SUM(CASE WHEN convenios_agg.parcelas_total > 0 AND convenios_agg.parcelas_em_aberto = 0 THEN 1 ELSE 0 END), 0) as convenios_encerrados')
             ->selectRaw('COALESCE(SUM(CASE WHEN convenios_agg.parcelas_em_aberto > 0 THEN 1 ELSE 0 END), 0) as convenios_com_parcelas_em_aberto')
+            ->selectRaw('COALESCE(SUM(CASE WHEN convenios_agg.parcelas_em_aberto > 0 THEN COALESCE(convenios_agg.valor_orgao, 0) ELSE 0 END), 0) as valor_total_convenio')
             ->selectRaw('COALESCE(SUM(convenios_agg.valor_em_aberto_total), 0) as valor_em_aberto_total')
             ->selectRaw('COALESCE(SUM(convenios_agg.valor_previsto_total), 0) as valor_previsto_total')
             ->selectRaw('COALESCE(SUM(CASE WHEN convenios_agg.parcelas_em_aberto > 0 THEN convenios_agg.valor_pago_total ELSE 0 END), 0) as valor_pago_total')
